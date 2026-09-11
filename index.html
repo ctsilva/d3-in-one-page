@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A minimal D3 tutorial</title>
+  <link rel="stylesheet" href="tutorial.css">
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#intro">Introduction</a></li>
+    <li><a href="#html">1. HTML and the DOM</a></li>
+    <li><a href="#css">2. CSS</a></li>
+    <li><a href="#js">3. Just enough JavaScript</a></li>
+    <li><a href="#svg">4. SVG</a></li>
+    <li><a href="#selections">5. D3 selections</a></li>
+    <li><a href="#data">6. Binding data</a></li>
+    <li><a href="#scales">7. Scales and axes</a></li>
+    <li><a href="#charts">8. Two charts</a></li>
+    <li><a href="#interaction">9. Interaction</a></li>
+    <li><a href="#next">10. Where to go next</a></li>
+    <li><a href="#cheatsheet">Cheat sheet</a></li>
+    <li><a href="#data-ack">Data acknowledgment</a></li>
+    <li><a href="#license">Acknowledgments and license</a></li>
+  </ol>
+</nav>
+
+<main>
+<section id="intro">
+  <p class="meta">InfoVis / VisML · one page · every example is editable</p>
+  <h1>A minimal D3 tutorial</h1>
+  <p class="lede">Everything you need to go from a blank page to an interactive, linked visualization with <a href="https://d3js.org">D3</a>: just enough HTML, CSS, JavaScript and SVG, then the small part of D3 that does most of the work.</p>
+
+  <p>D3 is not a charting library. It gives you a way to turn data into elements on a web page, and a toolbox of scales, shapes and behaviors for doing that well. Because it operates on the page directly, you cannot learn D3 without learning a little about how web pages are built. This tutorial covers that first, and keeps it minimal.</p>
+
+  <h3>How to use this page</h3>
+  <p>Every grey code box is live. Edit it, press <strong>Run</strong> (or ⌘/Ctrl + Enter), and the result below it updates. <strong>Reset</strong> restores the original. Examples run in isolation, so breaking one cannot break the others. Read in order the first time, because later sections assume the earlier ones. Expect about three hours, more if you do the exercises, which you should.</p>
+
+  <aside class="py">Yellow boxes like this one translate a concept into Python terms. Most of what you know about lists, dicts, comprehensions and pandas transfers; the surprising parts are the DOM and the way D3 binds data to elements rather than drawing a figure.</aside>
+
+  <h3>The running example: 495 pitches by Tarik Skubal</h3>
+  <p>Every example uses the same dataset: pitch-level Statcast measurements for five starts by Tarik Skubal, a left-handed pitcher. The data comes from <a href="https://baseballsavant.mlb.com">Baseball Savant</a>, MLB's Statcast site, and is copyright MLB Advanced Media. A small excerpt is used here for teaching; see the <a href="#data-ack">acknowledgment</a> at the end of the page. The variable <code>pitches</code> is already loaded in every example and holds one object per pitch. The same rows are in <a href="data/skubal.csv">data/skubal.csv</a>. These are the columns we use.</p>
+  <div class="table-wrap"><table class="fields">
+    <tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+    <tr><td><code>game_date</code></td><td>Date of the game, five distinct values</td><td>"2026-08-10"</td></tr>
+    <tr><td><code>inning</code>, <code>at_bat_number</code>, <code>pitch_number</code></td><td>Where in the game the pitch happened</td><td>1, 1, 1</td></tr>
+    <tr><td><code>pitch_name</code></td><td>Pitch type: 4-Seam Fastball, Changeup, Sinker, Slider, Curveball</td><td>"Sinker"</td></tr>
+    <tr><td><code>release_speed</code></td><td>Velocity at release, mph</td><td>97.3</td></tr>
+    <tr><td><code>release_spin_rate</code></td><td>Spin at release, rpm</td><td>2293</td></tr>
+    <tr><td><code>release_pos_x</code>, <code>release_pos_z</code></td><td>Where the ball left the hand, feet, catcher's view</td><td>1.53, 6.28</td></tr>
+    <tr><td><code>pfx_x</code>, <code>pfx_z</code></td><td>Horizontal and vertical movement, feet</td><td>0.82, 1.32</td></tr>
+    <tr><td><code>plate_x</code>, <code>plate_z</code></td><td>Where the pitch crossed the plate, feet</td><td>-0.891, 1.956</td></tr>
+    <tr><td><code>sz_top</code>, <code>sz_bot</code></td><td>Top and bottom of the batter's strike zone, feet</td><td>3.18, 1.61</td></tr>
+    <tr><td><code>description</code></td><td>Outcome of the pitch: ball, called_strike, foul, hit_into_play, …</td><td>"called_strike"</td></tr>
+    <tr><td><code>events</code></td><td>Outcome of the plate appearance, only on its last pitch</td><td>"strikeout"</td></tr>
+    <tr><td><code>launch_speed</code></td><td>Exit velocity of a batted ball, mph, mostly missing</td><td>98.3</td></tr>
+  </table></div>
+
+  <p>By the end you will have built this: a linked view where dragging a rectangle over release points filters two other charts.</p>
+  <figure class="example" data-mode="js" data-height="330" data-title="Preview · where we are going">
+  <script type="text/plain">
+    const color = d3.scaleOrdinal(["4-Seam Fastball","Changeup","Sinker","Slider","Curveball"],
+                                  ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4"]);
+    const W = 300, H = 300, m = {top: 20, right: 15, bottom: 40, left: 45};
+    const panel = (title) => {
+      const svg = d3.select("body").append("svg").attr("width", W).attr("height", H)
+        .style("display", "inline-block").style("margin-right", "8px");
+      svg.append("text").attr("x", m.left).attr("y", 14).style("font-weight", 600).text(title);
+      return svg;
+    };
+    const axes = (svg, x, y) => {
+      svg.append("g").attr("transform", `translate(0,${H - m.bottom})`).call(d3.axisBottom(x).ticks(5));
+      svg.append("g").attr("transform", `translate(${m.left},0)`).call(d3.axisLeft(y).ticks(5));
+    };
+    // Left: release point, the control.
+    const rx = d3.scaleLinear(d3.extent(pitches, d => d.release_pos_x), [m.left, W - m.right]).nice();
+    const rz = d3.scaleLinear(d3.extent(pitches, d => d.release_pos_z), [H - m.bottom, m.top]).nice();
+    const left = panel("Release point (ft). Drag to select");
+    axes(left, rx, rz);
+    left.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("cx", d => rx(d.release_pos_x)).attr("cy", d => rz(d.release_pos_z)).attr("r", 3).attr("fill", "#777");
+    // Right: movement, colored by type, follows the selection.
+    const mx = d3.scaleLinear(d3.extent(pitches, d => d.pfx_x * 12), [m.left, W - m.right]).nice();
+    const mz = d3.scaleLinear(d3.extent(pitches, d => d.pfx_z * 12), [H - m.bottom, m.top]).nice();
+    const right = panel("Movement (in), colored by pitch type");
+    axes(right, mx, mz);
+    const dots = right.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("cx", d => mx(d.pfx_x * 12)).attr("cy", d => mz(d.pfx_z * 12)).attr("r", 3)
+      .attr("fill", d => color(d.pitch_name));
+    const status = d3.select("body").append("p").text("All 495 pitches.");
+    left.append("g").call(d3.brush().extent([[m.left, m.top], [W - m.right, H - m.bottom]]).on("brush end", ({selection}) => {
+      const inside = d => !selection || (rx(d.release_pos_x) >= selection[0][0] && rx(d.release_pos_x) <= selection[1][0]
+                                       && rz(d.release_pos_z) >= selection[0][1] && rz(d.release_pos_z) <= selection[1][1]);
+      dots.attr("fill", d => inside(d) ? color(d.pitch_name) : "#ddd").attr("r", d => inside(d) ? 3 : 2);
+      const n = pitches.filter(inside).length;
+      status.text(selection ? `${n} of 495 pitches selected.` : "All 495 pitches.");
+    }));
+  </script>
+  </figure>
+</section>
+
+<section id="html">
+  <h2><span class="num">1</span>HTML and the DOM</h2>
+  <p>A web page is a text file written in HTML. It consists of <em>elements</em>, each written as an opening tag, some content, and a closing tag: <code>&lt;p&gt;Hello&lt;/p&gt;</code> is a paragraph element. Elements nest, so a page is a tree. Tags can carry <em>attributes</em>, name-value pairs inside the opening tag, such as <code>&lt;a href="…"&gt;</code>.</p>
+  <figure class="example" data-mode="html" data-height="220" data-title="Example 1.1 · A small page">
+  <script type="text/plain">
+    <h1>Tarik Skubal</h1>
+    <p>Left-handed starter. Five pitch types.</p>
+    <ul>
+      <li>4-Seam Fastball</li>
+      <li>Changeup</li>
+      <li>Sinker</li>
+    </ul>
+    <p>Data from <a href="https://baseballsavant.mlb.com">Baseball Savant</a>.</p>
+  </script>
+  </figure>
+  <p>Try adding the two missing pitch types to the list, then a second paragraph. Notice that line breaks and indentation in the source do not matter; structure comes from tags alone.</p>
+
+  <h3>The DOM</h3>
+  <p>When the browser reads HTML it builds the tree in memory. That tree is the <strong>Document Object Model</strong>, or DOM. Everything that happens on a page after it loads, including everything D3 does, is a modification of that tree: adding an element, changing an attribute, removing a node. The HTML file is just the initial state.</p>
+  <p>Open your browser's developer tools (right-click, <em>Inspect</em>) on any page and look at the <em>Elements</em> panel. That is the live DOM, and you can edit it in place. Get in the habit of inspecting; it is how you debug D3.</p>
+
+  <h3>Elements you will actually use</h3>
+  <ul>
+    <li><code>&lt;div&gt;</code>: a generic block container. Most page layout is nested divs.</li>
+    <li><code>&lt;span&gt;</code>: a generic inline container, for a few words inside a line.</li>
+    <li><code>&lt;p&gt;</code>, <code>&lt;h1&gt;</code>…<code>&lt;h3&gt;</code>, <code>&lt;ul&gt;</code>/<code>&lt;li&gt;</code>, <code>&lt;a&gt;</code>: text, headings, lists, links.</li>
+    <li><code>&lt;button&gt;</code>, <code>&lt;select&gt;</code>, <code>&lt;input&gt;</code>: controls.</li>
+    <li><code>&lt;svg&gt;</code>: where the drawing happens. Section 4.</li>
+    <li><code>&lt;script&gt;</code> and <code>&lt;style&gt;</code>: JavaScript and CSS, either inline or via <code>src</code>/<code>href</code>.</li>
+  </ul>
+  <p>Two attributes matter more than the rest. <code>id</code> names one unique element; <code>class</code> tags any number of elements with a label. Both exist so that CSS and JavaScript can find elements.</p>
+  <figure class="example" data-mode="html" data-height="150" data-title="Example 1.2 · Divs, ids and classes">
+  <script type="text/plain">
+    <div id="header">
+      <span class="label">Pitcher</span> Tarik Skubal
+    </div>
+    <div class="card">
+      <span class="label">Pitch</span> Sinker, 97.3 mph
+    </div>
+    <div class="card">
+      <span class="label">Pitch</span> Changeup, 86.4 mph
+    </div>
+  </script>
+  </figure>
+  <p>This renders as plain text, because divs and spans have no appearance of their own. Structure and appearance are separate concerns; appearance is the job of CSS.</p>
+  <aside class="py">HTML is a tree, like a nested structure of dicts and lists, or an <code>xml.etree.ElementTree</code>. If you have used Jupyter, you have already been writing into the DOM: a notebook cell's output is a piece of HTML inserted into the page.</aside>
+</section>
+
+<section id="css">
+  <h2><span class="num">2</span>CSS</h2>
+  <p>CSS is a list of rules. Each rule has a <em>selector</em>, which says which elements it applies to, and a block of <em>properties</em>. The selectors you need:</p>
+  <div class="table-wrap"><table class="fields">
+    <tr><th>Selector</th><th>Matches</th></tr>
+    <tr><td><code>p</code></td><td>every <code>&lt;p&gt;</code> element</td></tr>
+    <tr><td><code>.card</code></td><td>every element with <code>class="card"</code></td></tr>
+    <tr><td><code>#header</code></td><td>the element with <code>id="header"</code></td></tr>
+    <tr><td><code>.card .label</code></td><td>elements with class label <em>inside</em> an element with class card</td></tr>
+    <tr><td><code>.card:hover</code></td><td>a card while the mouse is over it</td></tr>
+    <tr><td><code>circle.selected</code></td><td>circles that also have class selected</td></tr>
+  </table></div>
+  <p>These same selectors are what D3's <code>select</code> and <code>selectAll</code> take as arguments, so learning them pays twice.</p>
+  <figure class="example" data-mode="html" data-height="200" data-title="Example 2.1 · Styling the cards">
+  <script type="text/plain">
+    <style>
+      body { font-family: Georgia, serif; }
+      #header { font-size: 20px; margin-bottom: 8px; }
+      .card { background: #f4f3ef; border-left: 4px solid #2a78d6; padding: 6px 10px; margin: 4px 0; width: 240px; }
+      .card:hover { background: #dbe8f8; }
+      .label { color: #7a7872; font-size: 12px; text-transform: uppercase; }
+    </style>
+    <div id="header"><span class="label">Pitcher</span> Tarik Skubal</div>
+    <div class="card"><span class="label">Pitch</span> Sinker, 97.3 mph</div>
+    <div class="card"><span class="label">Pitch</span> Changeup, 86.4 mph</div>
+  </script>
+  </figure>
+  <p>Properties you will use constantly: <code>color</code>, <code>background</code>, <code>font-family</code>, <code>font-size</code>, <code>width</code>, <code>height</code>, <code>margin</code> (space outside an element), <code>padding</code> (space inside), <code>border</code>. And one you should know about: <code>display: flex</code> lays children out in a row.</p>
+
+  <h3>A bar chart with no JavaScript</h3>
+  <p>A div is a rectangle, and width is a property, so a few divs are already a bar chart. The counts below are Skubal's pitch mix over the five games.</p>
+  <figure class="example" data-mode="html" data-height="190" data-title="Example 2.2 · Divs as bars">
+  <script type="text/plain">
+    <style>
+      .row { display: flex; align-items: center; margin: 3px 0; font-size: 13px; }
+      .name { width: 120px; text-align: right; padding-right: 8px; color: #4c4b46; }
+      .bar { height: 18px; background: #2a78d6; }
+      .n { padding-left: 6px; color: #7a7872; }
+    </style>
+    <div class="row"><span class="name">4-Seam Fastball</span><div class="bar" style="width: 187px"></div><span class="n">187</span></div>
+    <div class="row"><span class="name">Changeup</span><div class="bar" style="width: 151px"></div><span class="n">151</span></div>
+    <div class="row"><span class="name">Sinker</span><div class="bar" style="width: 64px"></div><span class="n">64</span></div>
+    <div class="row"><span class="name">Slider</span><div class="bar" style="width: 62px"></div><span class="n">62</span></div>
+    <div class="row"><span class="name">Curveball</span><div class="bar" style="width: 31px"></div><span class="n">31</span></div>
+  </script>
+  </figure>
+  <p>The <code>style</code> attribute sets properties on one element, inline. That is what D3's <code>.style()</code> does. We hand-typed five widths here; the point of D3 is to generate the five rows from the data instead. Hold that thought until section 6.</p>
+</section>
+
+<section id="js">
+  <h2><span class="num">3</span>Just enough JavaScript</h2>
+  <p>You need a small subset of the language. Modern JavaScript is closer to Python than its reputation suggests.</p>
+  <div class="table-wrap"><table class="fields">
+    <tr><th>Python</th><th>JavaScript</th><th>Notes</th></tr>
+    <tr><td><code>x = 3</code></td><td><code>const x = 3;</code> / <code>let x = 3;</code></td><td><code>const</code> cannot be reassigned. Use it by default. Never use <code>var</code>.</td></tr>
+    <tr><td><code>[1, 2, 3]</code></td><td><code>[1, 2, 3]</code></td><td>Arrays. <code>a.length</code>, not <code>len(a)</code>.</td></tr>
+    <tr><td><code>{"a": 1}</code></td><td><code>{a: 1}</code></td><td>Objects. Access with <code>o.a</code> or <code>o["a"]</code>.</td></tr>
+    <tr><td><code>lambda d: d * 2</code></td><td><code>d =&gt; d * 2</code></td><td>Arrow functions. Multi-line: <code>(d, i) =&gt; { …; return v; }</code></td></tr>
+    <tr><td><code>[f(d) for d in a]</code></td><td><code>a.map(d =&gt; f(d))</code></td><td></td></tr>
+    <tr><td><code>[d for d in a if c(d)]</code></td><td><code>a.filter(d =&gt; c(d))</code></td><td></td></tr>
+    <tr><td><code>f"{x} mph"</code></td><td><code>`${x} mph`</code></td><td>Template literals use backticks.</td></tr>
+    <tr><td><code>for d in a:</code></td><td><code>for (const d of a) { }</code></td><td><code>of</code>, not <code>in</code>.</td></tr>
+    <tr><td><code>print(x)</code></td><td><code>console.log(x)</code></td><td>Output goes to the browser console. On this page it also prints below the example.</td></tr>
+    <tr><td><code>None</code>, <code>True</code></td><td><code>null</code>/<code>undefined</code>, <code>true</code></td><td>Missing values are usually <code>undefined</code> or <code>NaN</code>.</td></tr>
+    <tr><td><code>==</code></td><td><code>===</code></td><td>Always triple. Double-equals does type coercion.</td></tr>
+  </table></div>
+  <figure class="example" data-mode="js" data-height="220" data-title="Example 3.1 · Values, arrays, functions">
+  <script type="text/plain">
+    const speeds = [97.3, 86.4, 95.1, 79.9];
+    const fast = speeds.filter(v => v > 90);
+    const mph = speeds.map(v => `${v} mph`);
+    const pitch = {name: "Sinker", speed: 97.3, spin: 2293};
+
+    console.log("fast:", fast);
+    console.log("labels:", mph);
+    console.log("first:", speeds[0], "count:", speeds.length);
+    console.log(`${pitch.name} at ${pitch.speed} mph`);
+
+    const describe = (p, i) => `#${i + 1} ${p.name}`;
+    console.log(describe(pitch, 0));
+  </script>
+  </figure>
+
+  <h3>Working with the data</h3>
+  <p><code>pitches</code> is an array of 495 objects. Filtering and mapping are plain JavaScript. For statistics and grouping, D3 has helpers that behave like pandas: <code>d3.mean</code>, <code>d3.median</code>, <code>d3.extent</code> (min and max as a pair), <code>d3.rollup</code> (group and aggregate).</p>
+  <figure class="example" data-mode="js" data-height="260" data-title="Example 3.2 · Filtering and grouping pitches">
+  <script type="text/plain">
+    console.log("rows:", pitches.length);
+    console.log("first row:", pitches[0]);
+
+    const fastballs = pitches.filter(d => d.pitch_name === "4-Seam Fastball");
+    console.log("fastballs:", fastballs.length, "mean mph:", d3.mean(fastballs, d => d.release_speed).toFixed(1));
+    console.log("velocity range:", d3.extent(pitches, d => d.release_speed));
+
+    // Group by pitch type and count: a Map from name to count.
+    const counts = d3.rollup(pitches, group => group.length, d => d.pitch_name);
+    console.log("counts:", Object.fromEntries(counts));
+
+    // Group by type and average velocity, then sort descending.
+    const mean = d3.rollup(pitches, g => d3.mean(g, d => d.release_speed), d => d.pitch_name);
+    const sorted = Array.from(mean).sort((a, b) => b[1] - a[1]);
+    for (const [name, v] of sorted) console.log(name.padEnd(16), v.toFixed(1));
+  </script>
+  </figure>
+  <aside class="py"><code>d3.rollup(rows, reducer, key)</code> is <code>df.groupby(key).agg(reducer)</code>. It returns a <code>Map</code>, JavaScript's dict with non-string keys; iterate it with <code>for (const [k, v] of map)</code> or convert with <code>Array.from(map)</code>. <code>d3.group</code> is the same without the reducer. There is no DataFrame: data is a list of row objects, and every column operation is a <code>map</code>.</aside>
+
+  <h3>Touching the DOM without D3</h3>
+  <p>The browser's own API can create elements and set attributes. Knowing it exists demystifies D3, which is a thinner layer over this than it looks.</p>
+  <figure class="example" data-mode="js" data-height="160" data-title="Example 3.3 · The raw DOM API">
+  <script type="text/plain">
+    const list = document.createElement("ul");
+    document.body.appendChild(list);
+
+    for (const d of pitches.slice(0, 4)) {
+      const item = document.createElement("li");
+      item.textContent = `${d.pitch_name}, ${d.release_speed} mph`;
+      item.style.color = d.release_speed > 90 ? "#2a78d6" : "#eb6834";
+      list.appendChild(item);
+    }
+    document.querySelector("li").style.fontWeight = "bold";  // first match, CSS selector
+  </script>
+  </figure>
+  <p>This is the pattern D3 automates: for each datum, create an element, set its attributes from the datum. Everything else in D3 is built on it.</p>
+</section>
+
+<section id="svg">
+  <h2><span class="num">4</span>SVG</h2>
+  <p>Divs can make bar charts, but not scatterplots or lines. For drawing, HTML has <strong>SVG</strong>, Scalable Vector Graphics: a set of elements for shapes that live in the DOM like everything else. That last part is what makes D3 possible. A circle is an element with attributes; a scatterplot is 495 circle elements; changing the data means changing attributes.</p>
+  <p>Coordinates start at the top-left corner, in pixels, with <strong>y increasing downward</strong>. This trips everyone up once.</p>
+  <figure class="example" data-mode="html" data-height="200" data-title="Example 4.1 · Basic shapes">
+  <script type="text/plain">
+    <svg width="420" height="170" style="border: 1px solid #ddd">
+      <rect x="20" y="20" width="80" height="50" fill="#2a78d6" />
+      <circle cx="160" cy="45" r="25" fill="#eb6834" />
+      <line x1="220" y1="20" x2="300" y2="70" stroke="#1baf7a" stroke-width="3" />
+      <text x="20" y="120" font-size="16">Text sits on its baseline at (20, 120)</text>
+      <circle cx="20" cy="120" r="3" fill="red" />
+    </svg>
+  </script>
+  </figure>
+  <p>The elements you need: <code>rect</code>, <code>circle</code>, <code>line</code>, <code>text</code>, <code>path</code>, and <code>g</code>. Shapes are colored with <code>fill</code> and <code>stroke</code>, which can be attributes as above or CSS properties. Position and size are always attributes, not CSS.</p>
+
+  <h3>Groups and transforms</h3>
+  <p><code>&lt;g&gt;</code> is the div of SVG: an invisible container. Its purpose is the <code>transform</code> attribute. Moving a group moves everything inside it, which is how charts get their margins and axes get positioned.</p>
+  <figure class="example" data-mode="html" data-height="200" data-title="Example 4.2 · Groups, transforms, paths, CSS">
+  <script type="text/plain">
+    <style>
+      .zone rect { fill: none; stroke: #4c4b46; stroke-dasharray: 4 3; }
+      .zone circle { fill: #2a78d6; opacity: .8; }
+      .zone circle:hover { fill: #eb6834; }
+    </style>
+    <svg width="420" height="170" style="border: 1px solid #ddd">
+      <g class="zone" transform="translate(40, 20)">
+        <rect x="0" y="0" width="100" height="120" />
+        <circle cx="30" cy="40" r="6" />
+        <circle cx="70" cy="90" r="6" />
+        <circle cx="110" cy="20" r="6" />
+      </g>
+      <g transform="translate(200, 20)">
+        <path d="M 0 100 L 40 30 L 80 70 L 120 10" fill="none" stroke="#1baf7a" stroke-width="2" />
+        <text x="0" y="130" font-size="12">a path: M moves, L draws a line</text>
+      </g>
+    </svg>
+  </script>
+  </figure>
+  <p>Change the <code>translate</code> and watch the whole strike zone move. The circles keep their local coordinates. Hovering a circle changes its fill purely through CSS, no JavaScript.</p>
+  <p>A <code>path</code> takes a mini-language in its <code>d</code> attribute. You will rarely write it by hand; D3's shape generators (section 10) produce it for you. Recognizing <code>M</code> (move to) and <code>L</code> (line to) is enough.</p>
+
+  <h3>Draw a scatterplot by hand</h3>
+  <p>Here are the first five pitches, plate location in feet. To draw them we have to convert feet to pixels by hand: 40 pixels per foot, x measured from a center line at 150, and z flipped and measured from a baseline at 165 so that up is up. Feel how tedious this is.</p>
+  <figure class="example" data-mode="html" data-height="200" data-title="Example 4.3 · A scatterplot, the hard way">
+  <script type="text/plain">
+    <!-- plate_x, plate_z of the first five pitches:
+         (-0.891, 1.956) (-0.159, 1.465) (0.963, 2.032) (-0.353, 2.891) (0.437, 1.426) -->
+    <svg width="300" height="170" style="border: 1px solid #ddd">
+      <line x1="150" y1="0" x2="150" y2="170" stroke="#ddd" />
+      <line x1="0" y1="165" x2="300" y2="165" stroke="#ddd" />
+      <circle cx="114" cy="87" r="5" />  <!-- 150 + -0.891*40, 165 - 1.956*40 -->
+      <circle cx="144" cy="106" r="5" />  <!-- 150 + -0.159*40, 165 - 1.465*40 -->
+      <circle cx="189" cy="84" r="5" />  <!-- 150 + 0.963*40, 165 - 2.032*40 -->
+      <circle cx="136" cy="49" r="5" />  <!-- 150 + -0.353*40, 165 - 2.891*40 -->
+      <circle cx="167" cy="108" r="5" />  <!-- 150 + 0.437*40, 165 - 1.426*40 -->
+    </svg>
+  </script>
+  </figure>
+  <p>Now imagine all 495, and then the request to make the plot twice as big. Every number changes. Computing pixel positions from data is what scales do in section 7, and generating one element per row is what data binding does in section 6. Together they replace this arithmetic entirely.</p>
+  <aside class="py">SVG is the closest thing to matplotlib's artist layer: a circle element is a <code>Circle</code> patch, a <code>g</code> is roughly an <code>Axes</code> with its own transform. The difference is that in SVG every artist stays addressable after drawing, and CSS and mouse events can reach it.</aside>
+</section>
+<section id="selections">
+  <h2><span class="num">5</span>D3 selections</h2>
+  <p>D3 is loaded on a page with one script tag, before your own code:</p>
+  <pre><code>&lt;script src="https://cdn.jsdelivr.net/npm/d3@7"&gt;&lt;/script&gt;
+&lt;script&gt;
+  // d3 is now a global object
+&lt;/script&gt;</code></pre>
+  <p>Everything starts with a <strong>selection</strong>. <code>d3.select("body")</code> finds the first element matching a CSS selector and wraps it in an object with methods for changing it. <code>append</code> adds a child element and returns a selection of the new element, so calls chain.</p>
+  <figure class="example" data-mode="js" data-height="150" data-title="Example 5.1 · Select, append, attr, chain">
+  <script type="text/plain">
+    d3.select("body")
+      .append("p")
+      .text("One pitch, drawn with D3:")
+      .style("font-weight", "600");
+
+    const svg = d3.select("body").append("svg")
+      .attr("width", 300)
+      .attr("height", 80);
+
+    svg.append("circle")
+      .attr("cx", 60).attr("cy", 40).attr("r", 20)
+      .attr("fill", "#2a78d6");
+
+    svg.append("text")
+      .attr("x", 95).attr("y", 45)
+      .text("Sinker, 97.3 mph");
+  </script>
+  </figure>
+  <p>The methods you will use, in order of frequency:</p>
+  <ul>
+    <li><code>attr(name, value)</code>: set an attribute. The workhorse.</li>
+    <li><code>append(tag)</code>: add a child; returns the child.</li>
+    <li><code>text(value)</code>: set the text content.</li>
+    <li><code>style(name, value)</code>: set an inline CSS property.</li>
+    <li><code>classed(name, true/false)</code>: add or remove a class, so CSS can do the styling.</li>
+    <li><code>select(selector)</code> / <code>selectAll(selector)</code>: find one or all descendants.</li>
+    <li><code>remove()</code>: delete the elements.</li>
+    <li><code>on(event, handler)</code>: listen for mouse or keyboard events. Section 9.</li>
+    <li><code>call(fn)</code>: pass the selection to a function; used for axes and brushes.</li>
+  </ul>
+  <p>Almost every method returns the selection it was called on, which is why D3 code reads as long chains. The exception is <code>append</code>, which returns the new child. Read chains top to bottom: each line modifies what the previous line produced.</p>
+  <aside class="py">Chaining works like method chains on a DataFrame: <code>df.query(…).groupby(…).mean()</code>. Each call returns an object to call the next method on. The <code>append</code> exception is like a method that returns a different object; after <code>svg.append("g")</code> you are holding the <code>g</code>, not the svg. Keep the parent in a variable when you need it later, as with <code>svg</code> above.</aside>
+
+  <h3>Selecting many elements</h3>
+  <p><code>selectAll</code> returns all matches. A method called on it applies to every element. Instead of a constant, you can pass a <strong>function</strong>, and D3 calls it once per element with the element's datum and index. Datum comes in section 6; for now the index alone is useful.</p>
+  <figure class="example" data-mode="js" data-height="120" data-title="Example 5.2 · selectAll and functions as values">
+  <script type="text/plain">
+    const svg = d3.select("body").append("svg").attr("width", 400).attr("height", 60);
+    for (let i = 0; i < 8; i++) svg.append("circle");   // eight empty circles
+
+    svg.selectAll("circle")
+      .attr("cx", (d, i) => 30 + i * 45)
+      .attr("cy", 30)
+      .attr("r", (d, i) => 4 + i * 2)
+      .attr("fill", (d, i) => i % 2 === 0 ? "#2a78d6" : "#eb6834");
+  </script>
+  </figure>
+  <p>The loop in that example is a smell. Creating elements one per data item, then setting their attributes from the data, is exactly what D3's data binding does, without the loop.</p>
+</section>
+
+<section id="data">
+  <h2><span class="num">6</span>Binding data</h2>
+  <p>The central idea of D3, and the one that is genuinely new if you come from matplotlib: you do not draw the data. You <em>bind</em> an array to a selection, and D3 creates, updates or removes elements so that there is one element per array item. Each element remembers its datum, and from then on, attribute functions receive it as <code>d</code>.</p>
+  <p>The pattern is three calls:</p>
+  <pre><code>svg.selectAll("circle")   // 1. the elements you want to exist (possibly none yet)
+   .data(array)           // 2. the data they should correspond to
+   .join("circle")        // 3. create/remove elements until they match</code></pre>
+  <p>The result is a selection of one circle per datum, ready for <code>attr</code>. Here is the pitch-mix bar chart from section 2, generated rather than typed.</p>
+  <figure class="example" data-mode="js" data-height="190" data-title="Example 6.1 · One div per datum">
+  <script type="text/plain">
+    const mix = [
+      {name: "4-Seam Fastball", n: 187}, {name: "Changeup", n: 151}, {name: "Sinker", n: 64},
+      {name: "Slider", n: 62}, {name: "Curveball", n: 31}
+    ];
+
+    const rows = d3.select("body").selectAll("div.row")
+      .data(mix)
+      .join("div")
+        .attr("class", "row")
+        .style("display", "flex").style("align-items", "center").style("margin", "3px 0");
+
+    rows.append("span").text(d => d.name)
+      .style("width", "120px").style("text-align", "right").style("padding-right", "8px");
+    rows.append("div")
+      .style("height", "18px").style("background", "#2a78d6")
+      .style("width", d => d.n + "px");
+    rows.append("span").text(d => d.n).style("padding-left", "6px").style("color", "#7a7872");
+  </script>
+  </figure>
+  <p>Change a count, add a sixth entry, or sort <code>mix</code> before binding it. Note also that <code>rows.append("span")</code> appends to each of the five rows, and the appended children <em>inherit the datum</em>, which is why <code>d =&gt; d.name</code> works on the span.</p>
+  <aside class="py">In matplotlib you call <code>ax.bar(names, counts)</code> and get a picture. In D3 you say "there should be one div per row of <code>mix</code>" and then describe each div's attributes as functions of its row. It is declarative about <em>what exists</em> and functional about <em>how it looks</em>. The upside comes when the data changes: rebinding new data updates existing elements in place, which is what makes smooth interaction possible.</aside>
+
+  <h3>The same thing in SVG</h3>
+  <p>Now the plate-location scatterplot from section 4, with all pitches from one game. The pixel arithmetic is still by hand for one more section.</p>
+  <figure class="example" data-mode="js" data-height="240" data-title="Example 6.2 · One circle per pitch">
+  <script type="text/plain">
+    const game = pitches.filter(d => d.game_date === "2026-08-10");   // 95 pitches
+    const svg = d3.select("body").append("svg").attr("width", 300).attr("height", 220)
+      .style("border", "1px solid #ddd");
+
+    svg.selectAll("circle")
+      .data(game)
+      .join("circle")
+        .attr("cx", d => 150 + d.plate_x * 40)
+        .attr("cy", d => 215 - d.plate_z * 40)
+        .attr("r", 4)
+        .attr("fill", d => d.description === "hit_into_play" ? "#eb6834" : "#2a78d6")
+        .attr("opacity", .7);
+
+    console.log("circles drawn:", svg.selectAll("circle").size());
+  </script>
+  </figure>
+  <p>Try a different <code>game_date</code>, or drop the filter and bind all 495. Color by <code>pitch_name</code> instead of outcome.</p>
+
+  <h3>Loading data from a file</h3>
+  <p>Real data comes from a file. <code>d3.csv(url)</code> fetches and parses a CSV and returns a <em>promise</em>, because fetching takes time; you attach the code that needs the data with <code>.then</code>. Every value comes back as a string, so pass <code>d3.autoType</code> to convert numbers and dates.</p>
+  <figure class="example" data-mode="js" data-height="170" data-title="Example 6.3 · d3.csv and autoType">
+  <script type="text/plain">
+    d3.csv("data/skubal.csv", d3.autoType).then(rows => {
+      console.log("loaded", rows.length, "rows");
+      console.log("columns:", rows.columns.slice(0, 8).join(", "), "…");
+      console.log("first row:", rows[0]);
+      console.log("typeof release_speed:", typeof rows[0].release_speed);
+    });
+
+    console.log("this line runs before the data arrives");
+  </script>
+  </figure>
+  <p>Notice the order of the printed lines. All of your drawing code goes inside the <code>.then</code> callback, or in an <code>async</code> function with <code>const rows = await d3.csv(…)</code>, which reads more naturally.</p>
+  <aside class="note">Browsers refuse to fetch local files from a page opened via <code>file://</code>. Serve your project directory instead: <code>python -m http.server</code>, then open <code>http://localhost:8000</code>. On this page, the example above falls back to an embedded copy of the CSV when it is opened as a file, so it works either way. In your own projects, the variable <code>pitches</code> will not exist; you load your data.</aside>
+  <aside class="py"><code>d3.csv(url, d3.autoType)</code> is <code>pd.read_csv</code>, returning a list of dicts rather than a DataFrame. Promises are the equivalent of <code>await</code>ing an <code>aiohttp</code> request. There is no blocking read in the browser.</aside>
+
+  <h3>Join handles change</h3>
+  <p>Call the same <code>selectAll…data…join</code> again with different data, and D3 reuses existing elements, creates the extra ones needed, and removes the surplus. Put the drawing in a function and call it whenever the data changes.</p>
+  <figure class="example" data-mode="js" data-height="280" data-title="Example 6.4 · Re-joining when the data changes">
+  <script type="text/plain">
+    const games = Array.from(new Set(pitches.map(d => d.game_date)));
+    const select = d3.select("body").append("select");
+    select.selectAll("option").data(games).join("option").text(d => d);
+
+    const svg = d3.select("body").append("svg").attr("width", 300).attr("height", 220)
+      .style("border", "1px solid #ddd").style("margin-top", "6px");
+    const label = d3.select("body").append("p");
+
+    function draw(date) {
+      const game = pitches.filter(d => d.game_date === date);
+      svg.selectAll("circle")
+        .data(game)
+        .join("circle")
+          .attr("cx", d => 150 + d.plate_x * 40)
+          .attr("cy", d => 215 - d.plate_z * 40)
+          .attr("r", 4).attr("fill", "#2a78d6").attr("opacity", .7);
+      label.text(`${date}: ${game.length} pitches, ${svg.selectAll("circle").size()} circles`);
+    }
+
+    draw(games[0]);
+    select.on("change", event => draw(event.target.value));
+  </script>
+  </figure>
+  <p>Pick a different game. The circle count follows the data. Older D3 code spells this out as <code>enter()</code>, <code>exit()</code> and an update selection; <code>join</code> does all three, and you can pass it functions to customize each phase when you need to.</p>
+</section>
+
+<section id="scales">
+  <h2><span class="num">7</span>Scales and axes</h2>
+  <p>A <strong>scale</strong> is a function from data values to pixel values. You give it a <em>domain</em> (the range of the data) and a <em>range</em> (the pixels available), and it does the arithmetic that section 4 did by hand.</p>
+  <figure class="example" data-mode="js" data-height="200" data-title="Example 7.1 · A linear scale is a function">
+  <script type="text/plain">
+    const x = d3.scaleLinear()
+      .domain([-2.5, 2.5])   // feet, left to right
+      .range([0, 300]);      // pixels
+
+    console.log("x(0) =", x(0), " x(-2.5) =", x(-2.5), " x(1) =", x(1));
+    console.log("inverse: x.invert(300) =", x.invert(300), "feet");
+
+    // Vertical scales flip the range so that larger values are higher on screen.
+    const y = d3.scaleLinear().domain([0, 5]).range([220, 0]);
+    console.log("y(0) =", y(0), " y(5) =", y(5));
+
+    // Domains usually come from the data. nice() rounds them to clean tick values.
+    const v = d3.scaleLinear().domain(d3.extent(pitches, d => d.release_speed)).range([0, 300]).nice();
+    console.log("velocity domain:", v.domain(), "  ticks:", v.ticks(5));
+  </script>
+  </figure>
+  <p>Three scale types cover nearly everything:</p>
+  <ul>
+    <li><code>scaleLinear</code>: number to number. Positions, sizes, opacity.</li>
+    <li><code>scaleBand</code>: category to a slot of equal width, for bar charts. <code>x.bandwidth()</code> is the bar width.</li>
+    <li><code>scaleOrdinal</code>: category to anything, typically a color. Pass a fixed list of categories so colors never depend on data order.</li>
+  </ul>
+  <p>Others exist (<code>scaleTime</code>, <code>scaleLog</code>, <code>scaleSqrt</code>, sequential color scales); they have the same shape.</p>
+
+  <h3>The margin convention</h3>
+  <p>Axes need room outside the plotting area. The universal D3 pattern is to declare a margin object, size the SVG to include it, and set each scale's range to the inner area. An <strong>axis</strong> is then a component you <code>call</code> on a group placed at the right edge; it reads the scale and draws ticks and labels.</p>
+  <figure class="example" data-mode="js" data-height="300" data-title="Example 7.2 · Scales, margins and axes">
+  <script type="text/plain">
+    const width = 360, height = 280;
+    const margin = {top: 10, right: 15, bottom: 35, left: 40};
+
+    const x = d3.scaleLinear().domain([-2.5, 2.5]).range([margin.left, width - margin.right]);
+    const y = d3.scaleLinear().domain([-0.5, 5.5]).range([height - margin.bottom, margin.top]);
+
+    const svg = d3.select("body").append("svg").attr("width", width).attr("height", height);
+
+    svg.append("g")
+      .attr("transform", `translate(0, ${height - margin.bottom})`)
+      .call(d3.axisBottom(x).ticks(5));
+    svg.append("g")
+      .attr("transform", `translate(${margin.left}, 0)`)
+      .call(d3.axisLeft(y));
+
+    svg.append("text").attr("x", width / 2).attr("y", height - 4)
+      .attr("text-anchor", "middle").attr("font-size", 11).text("horizontal position at the plate (ft)");
+
+    svg.append("g").selectAll("circle")
+      .data(pitches)
+      .join("circle")
+        .attr("cx", d => x(d.plate_x))
+        .attr("cy", d => y(d.plate_z))
+        .attr("r", 3).attr("fill", "#2a78d6").attr("opacity", .5);
+  </script>
+  </figure>
+  <p>Compare this to example 6.2: the only change is that <code>150 + d.plate_x * 40</code> became <code>x(d.plate_x)</code>. Resize the SVG or change the domain and nothing else needs to change. Add a <code>rect</code> for the strike zone: it spans <code>x(-0.83)</code> to <code>x(0.83)</code> horizontally and, for a typical batter, <code>y(3.2)</code> to <code>y(1.6)</code> vertically. Remember that the rect's <code>y</code> is its top edge.</p>
+
+  <h3>Band and ordinal scales</h3>
+  <figure class="example" data-mode="js" data-height="230" data-title="Example 7.3 · scaleBand and scaleOrdinal">
+  <script type="text/plain">
+    const types = ["4-Seam Fastball", "Changeup", "Sinker", "Slider", "Curveball"];
+    const color = d3.scaleOrdinal(types, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]);
+
+    const x = d3.scaleBand().domain(types).range([40, 360]).padding(0.2);
+    console.log("bandwidth:", x.bandwidth().toFixed(1), " x('Sinker') =", x("Sinker").toFixed(1));
+
+    const mean = d3.rollup(pitches, g => d3.mean(g, d => d.release_speed), d => d.pitch_name);
+    const y = d3.scaleLinear().domain([70, 100]).range([170, 10]);
+
+    const svg = d3.select("body").append("svg").attr("width", 380).attr("height", 200);
+    svg.append("g").attr("transform", "translate(40,0)").call(d3.axisLeft(y).ticks(4));
+    svg.append("g").attr("transform", "translate(0,170)").call(d3.axisBottom(x).tickSize(0))
+      .selectAll("text").attr("font-size", 9);
+
+    svg.selectAll("rect").data(types).join("rect")
+      .attr("x", d => x(d))
+      .attr("y", d => y(mean.get(d)))
+      .attr("width", x.bandwidth())
+      .attr("height", d => y(70) - y(mean.get(d)))
+      .attr("fill", d => color(d));
+
+    svg.selectAll("text.value").data(types).join("text").attr("class", "value")
+      .attr("x", d => x(d) + x.bandwidth() / 2).attr("y", d => y(mean.get(d)) - 4)
+      .attr("text-anchor", "middle").attr("font-size", 11)
+      .text(d => d3.format(".1f")(mean.get(d)));
+  </script>
+  </figure>
+  <p>Two details worth noticing. The bar's <code>height</code> is a difference of two scaled values, because y runs downward. And <code>d3.format(".1f")</code> creates a formatting function, using the same mini-language as Python's format specs.</p>
+  <aside class="py">A scale is <code>np.interp</code> with a memory: <code>x = scaleLinear().domain([a, b]).range([c, d])</code>, then <code>x(v)</code>. Matplotlib does this invisibly inside an <code>Axes</code>; D3 makes it an explicit object so that you can reuse it for positions, axes, brushes and inverse lookups. <code>d3.format(".1f")</code> is <code>"{:.1f}".format</code>, partially applied.</aside>
+</section>
+<section id="charts">
+  <h2><span class="num">8</span>Two charts</h2>
+  <p>Everything above now assembles into the two charts that appear in nearly every visualization: a bar chart and a scatterplot. Each is written as a function that takes data and returns an SVG, which is how you will want to organize real code.</p>
+
+  <h3>Bar chart: pitch mix</h3>
+  <p>Horizontal bars, sorted, with the counts computed from the raw rows rather than typed in. Bars are sorted because the order carries no information, so we use it to make comparison easy.</p>
+  <figure class="example" data-mode="js" data-height="230" data-title="Example 8.1 · Bar chart from grouped data">
+  <script type="text/plain">
+    function barChart(rows, {width = 400, height = 180} = {}) {
+      const counts = Array.from(d3.rollup(rows, g => g.length, d => d.pitch_name), ([name, n]) => ({name, n}))
+        .sort((a, b) => d3.descending(a.n, b.n));
+      const margin = {top: 5, right: 40, bottom: 20, left: 110};
+
+      const x = d3.scaleLinear().domain([0, d3.max(counts, d => d.n)]).range([margin.left, width - margin.right]).nice();
+      const y = d3.scaleBand().domain(counts.map(d => d.name)).range([margin.top, height - margin.bottom]).padding(0.25);
+
+      const svg = d3.create("svg").attr("width", width).attr("height", height);
+      svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).ticks(4));
+      svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).tickSize(0));
+
+      const bar = svg.append("g").selectAll("g").data(counts).join("g");
+      bar.append("rect")
+        .attr("x", x(0)).attr("y", d => y(d.name))
+        .attr("width", d => x(d.n) - x(0)).attr("height", y.bandwidth())
+        .attr("fill", "#2a78d6");
+      bar.append("text")
+        .attr("x", d => x(d.n) + 4).attr("y", d => y(d.name) + y.bandwidth() / 2)
+        .attr("dominant-baseline", "middle").attr("font-size", 11)
+        .text(d => d.n);
+      return svg.node();
+    }
+
+    document.body.append(barChart(pitches));
+  </script>
+  </figure>
+  <p><code>d3.create("svg")</code> makes a detached element, so the function returns a node and the caller decides where it goes. Try <code>barChart(pitches.filter(d =&gt; d.stand === "L"))</code> to see the mix against left-handed batters.</p>
+  <div class="exercise">Change the chart to show mean <code>release_speed</code> per pitch type rather than count. Then show the share of each type as a percentage using <code>d3.format(".0%")</code>.</div>
+
+  <h3>Scatterplot: movement by pitch type</h3>
+  <p>Horizontal versus vertical movement, in inches, colored by type. This is the plot that shows what a pitcher's repertoire is: each type occupies its own region. Color needs a legend, and the legend is just another data join.</p>
+  <figure class="example" data-mode="js" data-height="340" data-title="Example 8.2 · Scatterplot with color and legend">
+  <script type="text/plain">
+    const types = ["4-Seam Fastball", "Changeup", "Sinker", "Slider", "Curveball"];
+    const color = d3.scaleOrdinal(types, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]);
+
+    function scatter(rows, {width = 460, height = 320} = {}) {
+      const margin = {top: 10, right: 130, bottom: 40, left: 45};
+      const x = d3.scaleLinear().domain(d3.extent(rows, d => d.pfx_x * 12)).range([margin.left, width - margin.right]).nice();
+      const y = d3.scaleLinear().domain(d3.extent(rows, d => d.pfx_z * 12)).range([height - margin.bottom, margin.top]).nice();
+
+      const svg = d3.create("svg").attr("width", width).attr("height", height);
+      svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).ticks(6));
+      svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(6));
+      svg.append("text").attr("x", (margin.left + width - margin.right) / 2).attr("y", height - 5)
+        .attr("text-anchor", "middle").attr("font-size", 11).text("horizontal movement (in)");
+      svg.append("text").attr("transform", `translate(12,${height / 2}) rotate(-90)`)
+        .attr("text-anchor", "middle").attr("font-size", 11).text("vertical movement (in)");
+
+      svg.append("g").selectAll("circle").data(rows).join("circle")
+        .attr("cx", d => x(d.pfx_x * 12)).attr("cy", d => y(d.pfx_z * 12))
+        .attr("r", 3.5).attr("fill", d => color(d.pitch_name)).attr("opacity", .75);
+
+      const legend = svg.append("g").attr("transform", `translate(${width - margin.right + 15}, ${margin.top + 5})`)
+        .selectAll("g").data(types).join("g").attr("transform", (d, i) => `translate(0, ${i * 18})`);
+      legend.append("circle").attr("r", 5).attr("fill", d => color(d));
+      legend.append("text").attr("x", 10).attr("dy", "0.35em").attr("font-size", 11).text(d => d);
+      return svg.node();
+    }
+
+    document.body.append(scatter(pitches));
+  </script>
+  </figure>
+  <p>Two habits to keep from this example. The color scale is defined <em>outside</em> the chart function with a fixed category order, so the same type gets the same color in every chart on the page, regardless of which types happen to be present. And the axis labels say what the units are.</p>
+  <aside class="note">Five colors is the practical limit for identifying categories by hue, and even five cannot be told apart by every reader. When there are more categories, or when the identity really matters, use small multiples: one panel per category, with the others in grey for context. A good exercise after this section is to draw five copies of this scatter, one per pitch type, with the other four types in grey.</aside>
+  <div class="exercise">Make a second scatter of <code>release_speed</code> against <code>release_spin_rate</code> by passing the accessor functions as parameters, so one function draws both. Then map <code>launch_speed</code> to radius for the pitches that were hit, using <code>d3.scaleSqrt</code> so area, not radius, is proportional.</div>
+</section>
+
+<section id="interaction">
+  <h2><span class="num">9</span>Interaction</h2>
+  <p>Because every mark is a DOM element, interaction is just event handling. <code>selection.on(event, handler)</code> registers a listener on each element; the handler receives the browser event and the datum. The events you need are <code>mouseenter</code>, <code>mouseleave</code>, <code>mousemove</code> and <code>click</code>.</p>
+
+  <h3>Hover and tooltips</h3>
+  <p>A tooltip is an absolutely positioned div that follows the mouse. <code>d3.pointer(event)</code> gives coordinates relative to the element, which is convenient for placing it.</p>
+  <figure class="example" data-mode="js" data-height="300" data-title="Example 9.1 · Hover highlight and a tooltip">
+  <script type="text/plain">
+    const width = 400, height = 260, margin = {top: 10, right: 15, bottom: 35, left: 45};
+    const x = d3.scaleLinear().domain(d3.extent(pitches, d => d.release_speed)).range([margin.left, width - margin.right]).nice();
+    const y = d3.scaleLinear().domain(d3.extent(pitches, d => d.release_spin_rate)).range([height - margin.bottom, margin.top]).nice();
+
+    const svg = d3.select("body").append("svg").attr("width", width).attr("height", height);
+    svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).ticks(5));
+    svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(5));
+
+    const tip = d3.select("body").append("div").attr("class", "tooltip").style("display", "none");
+
+    svg.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("cx", d => x(d.release_speed)).attr("cy", d => y(d.release_spin_rate))
+      .attr("r", 3.5).attr("fill", "#2a78d6").attr("opacity", .6)
+      .on("mouseenter", (event, d) => {
+        d3.select(event.currentTarget).attr("fill", "#eb6834").attr("r", 6).attr("opacity", 1);
+        tip.style("display", "block")
+          .html(`<b>${d.pitch_name}</b><br>${d.release_speed} mph, ${d.release_spin_rate} rpm<br>${d.description}`);
+      })
+      .on("mousemove", event => {
+        tip.style("left", event.pageX + 12 + "px").style("top", event.pageY + 12 + "px");
+      })
+      .on("mouseleave", event => {
+        d3.select(event.currentTarget).attr("fill", "#2a78d6").attr("r", 3.5).attr("opacity", .6);
+        tip.style("display", "none");
+      });
+  </script>
+  </figure>
+  <p><code>event.currentTarget</code> is the element the handler is attached to; wrapping it in <code>d3.select</code> lets you modify just that one. For dense plots, hovering a 3-pixel circle is fiddly; the fix is to find the nearest point with <code>d3.quadtree</code> or a Delaunay triangulation (<code>d3.Delaunay</code>), which the D3 docs cover.</p>
+
+  <h3>Brushing and linked views</h3>
+  <p>The interaction that defines InfoVis: select in one view, see the selection in another. <code>d3.brush</code> is a behavior you <code>call</code> on a group; it draws the drag rectangle and fires events with the selection in pixel coordinates. You invert those through the scales, or compare them to scaled positions, then update the other views.</p>
+  <figure class="example" data-mode="js" data-height="560" data-title="Example 9.2 · Brush one view, filter the others">
+  <script type="text/plain">
+    const types = ["4-Seam Fastball", "Changeup", "Sinker", "Slider", "Curveball"];
+    const color = d3.scaleOrdinal(types, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]);
+    const W = 280, H = 260, m = {top: 22, right: 12, bottom: 35, left: 42};
+
+    // A small helper so each panel is a few lines.
+    function panel(title, xAcc, yAcc) {
+      const x = d3.scaleLinear().domain(d3.extent(pitches, xAcc)).range([m.left, W - m.right]).nice();
+      const y = d3.scaleLinear().domain(d3.extent(pitches, yAcc)).range([H - m.bottom, m.top]).nice();
+      const svg = d3.select("#panels").append("svg").attr("width", W).attr("height", H);
+      svg.append("text").attr("x", m.left).attr("y", 14).attr("font-size", 12).attr("font-weight", 600).text(title);
+      svg.append("g").attr("transform", `translate(0,${H - m.bottom})`).call(d3.axisBottom(x).ticks(5));
+      svg.append("g").attr("transform", `translate(${m.left},0)`).call(d3.axisLeft(y).ticks(5));
+      const dots = svg.append("g").selectAll("circle").data(pitches).join("circle")
+        .attr("cx", d => x(xAcc(d))).attr("cy", d => y(yAcc(d))).attr("r", 3);
+      return {svg, x, y, dots};
+    }
+
+    d3.select("body").append("div").attr("id", "panels").style("display", "flex").style("flex-wrap", "wrap");
+    const release  = panel("Release point (ft): drag to select", d => d.release_pos_x, d => d.release_pos_z);
+    const movement = panel("Movement (in)", d => d.pfx_x * 12, d => d.pfx_z * 12);
+    const status = d3.select("body").append("p");
+
+    // The bar chart, built once; its bars are updated in place from the selection.
+    const bx = d3.scaleLinear().domain([0, 190]).range([m.left + 70, 2 * W - 40]);
+    const by = d3.scaleBand().domain(types).range([m.top, 150]).padding(0.25);
+    const bars = d3.select("body").append("svg").attr("width", 2 * W).attr("height", 160);
+    bars.append("text").attr("x", m.left).attr("y", 14).attr("font-size", 12).attr("font-weight", 600).text("Pitch mix in the selection");
+    bars.append("g").attr("transform", `translate(${m.left + 70},0)`).call(d3.axisLeft(by).tickSize(0));
+    bars.append("g").selectAll("rect.all").data(types).join("rect").attr("class", "all")   // full-sample bars, grey
+      .attr("x", bx(0)).attr("y", d => by(d)).attr("height", by.bandwidth()).attr("fill", "#e6e4de")
+      .attr("width", d => bx(pitches.filter(p => p.pitch_name === d).length) - bx(0));
+    const bar = bars.append("g").selectAll("rect.sel").data(types).join("rect").attr("class", "sel")
+      .attr("x", bx(0)).attr("y", d => by(d)).attr("height", by.bandwidth()).attr("fill", d => color(d));
+    const count = bars.append("g").selectAll("text.n").data(types).join("text").attr("class", "n")
+      .attr("y", d => by(d) + by.bandwidth() / 2).attr("dy", "0.35em").attr("font-size", 11);
+
+    // One function applies a selection everywhere. Everything else calls it.
+    function update(selected) {          // selected: a Set of pitch objects
+      const inside = d => selected.has(d);
+      release.dots.attr("fill", d => inside(d) ? "#555" : "#ddd");
+      movement.dots.attr("fill", d => inside(d) ? color(d.pitch_name) : "#e6e4de");
+      movement.dots.filter(inside).raise();       // draw selected on top
+      const n = d3.rollup(pitches.filter(inside), g => g.length, d => d.pitch_name);
+      bar.attr("width", d => bx(n.get(d) || 0) - bx(0));
+      count.attr("x", d => bx(n.get(d) || 0) + 4).text(d => n.get(d) || 0);
+      status.text(`${selected.size} of ${pitches.length} pitches selected.`);
+    }
+
+    const brush = d3.brush()
+      .extent([[m.left, m.top], [W - m.right, H - m.bottom]])
+      .on("start brush end", ({selection}) => {
+        if (!selection) return update(new Set(pitches));   // brush cleared
+        const [[x0, y0], [x1, y1]] = selection;
+        update(new Set(pitches.filter(d => {
+          const px = release.x(d.release_pos_x), py = release.y(d.release_pos_z);
+          return x0 <= px && px <= x1 && y0 <= py && py <= y1;
+        })));
+      });
+    release.svg.append("g").call(brush);
+    update(new Set(pitches));
+  </script>
+  </figure>
+  <p>The structure is the thing to learn, more than any line. There is one piece of state, the selected set. One function, <code>update</code>, renders that state into every view. The brush handler computes the state and calls <code>update</code>. A filter dropdown, a legend click or a search box would all do the same. That is how a real explorer combines several brushes, a game filter and pitch-type toggles without the views ever disagreeing.</p>
+  <p>Note that the brush gives pixel coordinates and we compare scaled positions to them. The alternative is to invert: <code>release.x.invert(x0)</code> gives feet, which is what you want if the selection should survive a resize.</p>
+  <div class="exercise">Add a brush to the movement panel too, so that a pitch must be inside both rectangles. Then make the legend in example 8.2 clickable to toggle a pitch type on and off. Both are changes to how the selected set is computed; <code>update</code> stays the same.</div>
+</section>
+
+<section id="next">
+  <h2><span class="num">10</span>Where to go next</h2>
+  <p>You now know the part of D3 that does most of the work. Two more pieces come up often enough to see once.</p>
+
+  <h3>Lines and shape generators</h3>
+  <p><code>d3.line()</code> turns an array of points into the <code>d</code> attribute of a path. Configure it with accessor functions, then call it on the data. Here, velocity pitch by pitch through one game, one line per pitch type.</p>
+  <figure class="example" data-mode="js" data-height="300" data-title="Example 10.1 · d3.line">
+  <script type="text/plain">
+    const types = ["4-Seam Fastball", "Changeup", "Sinker", "Slider", "Curveball"];
+    const color = d3.scaleOrdinal(types, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]);
+    const game = pitches.filter(d => d.game_date === "2026-08-16").map((d, i) => ({...d, seq: i + 1}));
+
+    const width = 460, height = 260, margin = {top: 10, right: 110, bottom: 35, left: 40};
+    const x = d3.scaleLinear().domain([1, game.length]).range([margin.left, width - margin.right]);
+    const y = d3.scaleLinear().domain(d3.extent(game, d => d.release_speed)).range([height - margin.bottom, margin.top]).nice();
+
+    const svg = d3.select("body").append("svg").attr("width", width).attr("height", height);
+    svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).ticks(6));
+    svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(5));
+    svg.append("text").attr("x", width / 2 - 40).attr("y", height - 5).attr("font-size", 11).attr("text-anchor", "middle").text("pitch number in game");
+
+    const line = d3.line().x(d => x(d.seq)).y(d => y(d.release_speed));
+    const byType = d3.group(game, d => d.pitch_name);
+
+    svg.append("g").selectAll("path").data(byType).join("path")
+      .attr("d", ([type, rows]) => line(rows))
+      .attr("fill", "none").attr("stroke", ([type]) => color(type)).attr("stroke-width", 1.5);
+
+    svg.append("g").selectAll("text").data(byType).join("text")
+      .attr("x", width - margin.right + 6).attr("y", ([type, rows]) => y(rows[rows.length - 1].release_speed))
+      .attr("dy", "0.35em").attr("font-size", 11).attr("fill", ([type]) => color(type)).text(([type]) => type);
+  </script>
+  </figure>
+  <p>Note that <code>data(byType)</code> binds a Map: each datum is a <code>[key, rows]</code> pair, destructured in the accessors. <code>d3.area</code>, <code>d3.arc</code> and the curve interpolators (<code>.curve(d3.curveMonotoneX)</code>) work the same way.</p>
+
+  <h3>Transitions</h3>
+  <p>Insert <code>.transition().duration(ms)</code> into a chain and the attribute changes that follow are animated instead of instant. Use it to show that an element changed, not for decoration.</p>
+  <figure class="example" data-mode="js" data-height="240" data-title="Example 10.2 · Animated update">
+  <script type="text/plain">
+    const types = ["4-Seam Fastball", "Changeup", "Sinker", "Slider", "Curveball"];
+    const games = Array.from(new Set(pitches.map(d => d.game_date)));
+    const x = d3.scaleLinear().domain([0, 50]).range([110, 380]);
+    const y = d3.scaleBand().domain(types).range([5, 150]).padding(0.25);
+
+    const select = d3.select("body").append("select");
+    select.selectAll("option").data(games).join("option").text(d => d);
+    const svg = d3.select("body").append("svg").attr("width", 400).attr("height", 160);
+    svg.append("g").attr("transform", "translate(110,0)").call(d3.axisLeft(y).tickSize(0));
+    const bar = svg.selectAll("rect").data(types).join("rect")
+      .attr("x", x(0)).attr("y", d => y(d)).attr("height", y.bandwidth()).attr("width", 0).attr("fill", "#2a78d6");
+
+    function show(date) {
+      const n = d3.rollup(pitches.filter(d => d.game_date === date), g => g.length, d => d.pitch_name);
+      bar.transition().duration(600)
+        .attr("width", d => x(n.get(d) || 0) - x(0));
+    }
+    show(games[0]);
+    select.on("change", e => show(e.target.value));
+  </script>
+  </figure>
+
+  <h3>Reading further</h3>
+  <ul>
+    <li><a href="https://d3js.org">d3js.org</a>: the official documentation, organized by module, with an example for everything. Read <em>Selections</em>, <em>Joining data</em> and <em>Scales</em> first.</li>
+    <li><a href="https://observablehq.com/@d3/gallery">The D3 gallery on Observable</a>: hundreds of complete, forkable examples. Observable notebooks run cells in a slightly different environment; the D3 code is the same.</li>
+    <li><a href="https://developer.mozilla.org/en-US/docs/Web/SVG">MDN on SVG</a> and <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript">on JavaScript</a>: the reference for everything that is not D3.</li>
+    <li>Scott Murray, <em>Interactive Data Visualization for the Web</em>, 2nd edition (O'Reilly, 2017), and his earlier <a href="https://scottmurray.org/tutorials/d3">online D3 tutorials</a>: the classic long-form introduction, and the inspiration for this page. Their code uses D3 v3 and v4, so translate <code>enter().append()</code> to <code>join()</code>.</li>
+  </ul>
+  <aside class="py">If you want charts quickly and reproducibly from Python, use <a href="https://altair-viz.github.io">Altair</a>: it emits Vega-Lite, a grammar of graphics that runs in the browser, and it covers a large fraction of what people build in D3 with far less code. Reach for D3 when the visualization is novel, when interaction needs to be custom, or when the figure is part of a larger interactive page. Knowing D3 also makes Vega-Lite's model easy to read, since both rest on the same scales, marks and encodings.</aside>
+</section>
+
+<section id="cheatsheet">
+  <h2>Cheat sheet</h2>
+  <p>The functions used on this page. This is most of the D3 you will need for a course project.</p>
+  <div class="table-wrap"><table class="fields cheatsheet">
+    <tr><th>Area</th><th>Functions</th><th>Section</th></tr>
+    <tr><td>Selections</td><td><code>d3.select</code>, <code>d3.selectAll</code>, <code>d3.create</code>, <code>.append</code>, <code>.attr</code>, <code>.style</code>, <code>.text</code>, <code>.html</code>, <code>.classed</code>, <code>.remove</code>, <code>.raise</code>, <code>.filter</code>, <code>.size</code>, <code>.node</code>, <code>.call</code>, <code>.on</code></td><td>5, 9</td></tr>
+    <tr><td>Data join</td><td><code>.data</code>, <code>.join</code></td><td>6</td></tr>
+    <tr><td>Loading</td><td><code>d3.csv</code>, <code>d3.json</code>, <code>d3.autoType</code>, <code>d3.csvParse</code></td><td>6</td></tr>
+    <tr><td>Statistics</td><td><code>d3.min</code>, <code>d3.max</code>, <code>d3.extent</code>, <code>d3.mean</code>, <code>d3.median</code>, <code>d3.sum</code>, <code>d3.ascending</code>, <code>d3.descending</code></td><td>3</td></tr>
+    <tr><td>Grouping</td><td><code>d3.group</code>, <code>d3.rollup</code></td><td>3, 8</td></tr>
+    <tr><td>Scales</td><td><code>d3.scaleLinear</code>, <code>d3.scaleBand</code>, <code>d3.scaleOrdinal</code>, <code>d3.scaleSqrt</code>, <code>.domain</code>, <code>.range</code>, <code>.nice</code>, <code>.invert</code>, <code>.bandwidth</code>, <code>.ticks</code></td><td>7</td></tr>
+    <tr><td>Axes</td><td><code>d3.axisBottom</code>, <code>d3.axisLeft</code>, <code>.ticks</code>, <code>.tickSize</code>, <code>.tickFormat</code></td><td>7</td></tr>
+    <tr><td>Formatting</td><td><code>d3.format</code></td><td>7</td></tr>
+    <tr><td>Shapes</td><td><code>d3.line</code>, <code>d3.area</code>, <code>.curve</code></td><td>10</td></tr>
+    <tr><td>Interaction</td><td><code>.on</code>, <code>d3.pointer</code>, <code>d3.brush</code>, <code>.extent</code>, <code>d3.quadtree</code></td><td>9</td></tr>
+    <tr><td>Animation</td><td><code>.transition</code>, <code>.duration</code></td><td>10</td></tr>
+  </table></div>
+</section>
+
+<section id="data-ack">
+  <h2>Data acknowledgment</h2>
+  <p>The pitch data on this page comes from <a href="https://baseballsavant.mlb.com">Baseball Savant</a>, the Statcast site of Major League Baseball, and is copyright MLB Advanced Media, L.P. It was downloaded on September 8, 2026 with the <a href="https://baseballsavant.mlb.com/statcast_search">Statcast search</a> tool: pitcher Tarik Skubal (MLB ID 669373), regular-season games from August 8 to September 7, 2026, 495 pitches in five games. The file used here keeps 22 of the original 119 columns and is otherwise unmodified. <a href="https://baseballsavant.mlb.com/csv-docs">Statcast field definitions</a> describe every column.</p>
+  <p>This small excerpt is included so that the examples can run, for teaching and non-commercial educational use. We claim no ownership of the data and do not redistribute the full dataset; for anything beyond following this tutorial, download the data from Baseball Savant directly.</p>
+</section>
+
+<section id="license">
+  <h2>Acknowledgments and license</h2>
+  <p>The shape of this tutorial, from HTML fundamentals through data binding to scales and axes, follows Scott Murray's <a href="https://scottmurray.org/tutorials/d3">D3 tutorials</a> (2012), which taught a generation of students D3 and remain a model of how to explain it. This page is a fresh treatment for the current version of D3 rather than an update of his text.</p>
+  <p>Copyright © 2026 Claudio T. Silva. The prose of this tutorial is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>: share and adapt it with attribution. The code, including every example on this page, <code>tutorial.js</code>, <code>tutorial.css</code> and <code>data/make_data.py</code>, is licensed under the <a href="https://opensource.org/license/mit">MIT License</a>; see <code>LICENSE</code>. The pitch data is not covered by either license; see the <a href="#data-ack">data acknowledgment</a>.</p>
+  <p class="meta">D3 7.9.0 is vendored in <code>vendor/</code> under the ISC license. This page has no build step: the source is one HTML file, and each example runs in its own frame.</p>
+</section>
+</main>
+</div>
+<script src="tutorial.js"></script>
+</body>
+</html>
