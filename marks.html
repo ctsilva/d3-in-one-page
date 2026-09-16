@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marks, channels and graphs</title>
+  <link rel="stylesheet" href="tutorial.css">
+  <!-- Loaded here only so section 2 can print the helper source. Examples load their own copies. -->
+  <script src="vendor/d3.v7.min.js"></script>
+  <script src="data/skubal.js"></script>
+  <script src="helpers.js"></script>
+</head>
+<body data-helpers>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#intro">Introduction</a></li>
+    <li><a href="#types">1. Data types</a></li>
+    <li><a href="#helper">2. A helper for the boilerplate</a></li>
+    <li><a href="#channels">3. Marks and channels</a></li>
+    <li><a href="#bars">4. Bar charts and dot plots</a></li>
+    <li><a href="#distributions">5. Distributions</a></li>
+    <li><a href="#lines">6. Lines and areas</a></li>
+    <li><a href="#scatter">7. Scatterplots</a></li>
+    <li><a href="#matrix">8. Matrices and heatmaps</a></li>
+    <li><a href="#honest">9. Scales that tell the truth</a></li>
+    <li><a href="#choosing">10. Choosing a graph</a></li>
+    <li><a href="#cheatsheet">Cheat sheet</a></li>
+    <li><a href="#data-ack">Data acknowledgment</a></li>
+    <li><a href="#license">Acknowledgments and license</a></li>
+  </ol>
+</nav>
+
+<main>
+<section id="intro">
+  <p class="meta">InfoVis / VisML · lab · every example is editable</p>
+  <div class="series-nav">
+    <a href="index.html">0 · A minimal D3 tutorial</a>
+    <span>1 · Marks, channels and graphs</span>
+    <a href="color.html">2 · Color</a>
+  </div>
+  <h1>Marks, channels and graphs</h1>
+  <p class="lede">A chart is a set of marks whose visual properties are driven by data. This lab builds the basic graphs from that idea, one decision at a time: which mark, which channel for which field, which scale, and when the obvious choice misleads.</p>
+
+  <p>This is the second page in a series. It assumes you have worked through <a href="index.html">A minimal D3 tutorial</a>, so selections, joins, scales and axes are familiar. Nothing here is new D3 machinery for its own sake; the new material is about <em>design</em>, and the D3 is how you try the designs out. The next page, <a href="color.html">Color</a>, does the same for the one channel that deserves a lab of its own.</p>
+
+  <h3>How to use this page</h3>
+  <p>Every grey code box is live. Edit it, press <strong>Run</strong> (or ⌘/Ctrl + Enter), and the output updates. <strong>Reset</strong> restores the original. Each example runs in isolation. Read the sections in order; expect about two and a half hours with the exercises.</p>
+
+  <h3>The data</h3>
+  <p>The same 495 pitches by Tarik Skubal as in the D3 tutorial, from <a href="https://baseballsavant.mlb.com">Baseball Savant</a> (copyright MLB Advanced Media; see the <a href="#data-ack">acknowledgment</a>). The array <code>pitches</code> is loaded in every example, one object per pitch. The fields this page uses:</p>
+  <div class="table-wrap"><table class="fields">
+    <tr><th>Field</th><th>Meaning</th></tr>
+    <tr><td><code>pitch_name</code></td><td>4-Seam Fastball, Changeup, Sinker, Slider or Curveball</td></tr>
+    <tr><td><code>game_date</code>, <code>inning</code></td><td>Five games, innings 1 to 7</td></tr>
+    <tr><td><code>balls</code>, <code>strikes</code></td><td>The count before the pitch, 0–3 balls and 0–2 strikes</td></tr>
+    <tr><td><code>stand</code></td><td>Batter side, <code>"L"</code> or <code>"R"</code></td></tr>
+    <tr><td><code>release_speed</code>, <code>release_spin_rate</code></td><td>Velocity (mph) and spin (rpm) at release</td></tr>
+    <tr><td><code>pfx_x</code>, <code>pfx_z</code></td><td>Horizontal and vertical movement, feet</td></tr>
+    <tr><td><code>plate_x</code>, <code>plate_z</code></td><td>Where the pitch crossed the plate, feet, from the catcher's view: <code>plate_x</code> is 0 over the middle of the plate, <code>plate_z</code> is height above the ground</td></tr>
+    <tr><td><code>sz_top</code>, <code>sz_bot</code></td><td>Top and bottom of the batter's strike zone, feet</td></tr>
+    <tr><td><code>description</code></td><td>Result of the pitch: ball, called_strike, swinging_strike, foul, hit_into_play, …</td></tr>
+    <tr><td><code>launch_speed</code></td><td>Exit velocity when the ball was hit, mph; missing otherwise</td></tr>
+  </table></div>
+</section>
+
+<section id="types">
+  <h2><span class="num">1</span>Data types</h2>
+  <p>Before choosing a chart, classify the fields. The type of a field decides which operations make sense on it, and so which visual channels can represent it faithfully.</p>
+  <div class="table-wrap"><table class="fields">
+    <tr><th>Type</th><th>What you can do</th><th>In the pitch data</th></tr>
+    <tr><td><strong>Nominal</strong> (N)</td><td>Tell values apart: <code>=</code>, <code>≠</code></td><td><code>pitch_name</code>, <code>stand</code>, <code>description</code></td></tr>
+    <tr><td><strong>Ordinal</strong> (O)</td><td>Also order them: <code>&lt;</code>, <code>&gt;</code></td><td><code>inning</code>, the count (<code>balls</code>-<code>strikes</code>)</td></tr>
+    <tr><td><strong>Quantitative</strong> (Q)</td><td>Also subtract, and often divide: differences and ratios mean something</td><td><code>release_speed</code>, <code>release_spin_rate</code>, <code>launch_speed</code></td></tr>
+    <tr><td><strong>Temporal</strong> (T)</td><td>Quantitative with calendar structure</td><td><code>game_date</code>, pitch order within a game</td></tr>
+    <tr><td><strong>Spatial</strong> (S)</td><td>Positions in a physical space; distance and direction matter</td><td><code>plate_x</code>, <code>plate_z</code> together: a location on a map of the strike zone</td></tr>
+  </table></div>
+  <p>The type is a property of how you use the field, not of how it is stored. <code>balls</code> is stored as a number, but "2 balls" is not twice "1 ball" in any useful sense: treat it as ordinal. <code>inning</code> is ordinal too, though its equal spacing makes it safe to draw on a linear axis.</p>
+  <figure class="example" data-mode="js" data-height="200" data-title="Example 1.1 · Inspecting fields">
+  <script type="text/plain">
+    // A quick profile: how many distinct values, and a few of them.
+    // Few distinct strings suggests nominal; many numbers suggests quantitative.
+    const fields = ["pitch_name", "stand", "description", "balls", "inning", "game_date", "release_speed", "plate_x"];
+    for (const f of fields) {
+      const values = Array.from(new Set(pitches.map(d => d[f])));
+      console.log(`${f}: ${values.length} distinct, e.g. ${values.slice(0, 4).join(", ")}`);
+    }
+  </script>
+  </figure>
+
+  <p>Here is a bar chart written the long way, as in the D3 tutorial. The x field is the count, which is ordinal, so the bars keep the count's own order instead of being sorted by height.</p>
+  <figure class="example" data-mode="js" data-height="260" data-title="Example 1.2 · Pitches per count, in plain D3">
+  <script type="text/plain">
+    // All twelve counts in order: 0-0, 1-0, 2-0, 3-0, then the same with 1 strike, then 2 strikes.
+    const counts = d3.cross([0, 1, 2], [0, 1, 2, 3], (strikes, balls) => `${balls}-${strikes}`);
+    const n = d3.rollup(pitches, g => g.length, d => `${d.balls}-${d.strikes}`);
+
+    const width = 460, height = 240, margin = {top: 10, right: 10, bottom: 40, left: 40};
+    const x = d3.scaleBand(counts, [margin.left, width - margin.right]).padding(0.15);
+    const y = d3.scaleLinear([0, d3.max(n.values())], [height - margin.bottom, margin.top]).nice();
+
+    const svg = d3.select("body").append("svg").attr("width", width).attr("height", height);
+    svg.append("g").attr("transform", `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).tickSizeOuter(0));
+    svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(5));
+    svg.append("text").attr("x", width / 2).attr("y", height - 5).attr("text-anchor", "middle")
+      .attr("font-size", 11).text("count (balls-strikes)");
+
+    svg.append("g").attr("fill", "#2a78d6").selectAll("rect").data(counts).join("rect")
+      .attr("x", c => x(c)).attr("y", c => y(n.get(c)))
+      .attr("width", x.bandwidth()).attr("height", c => y(0) - y(n.get(c)));
+  </script>
+  </figure>
+  <div class="exercise">Sort the bars by height with <code>counts.sort((a, b) => n.get(b) - n.get(a))</code>. What do you gain, and what do you lose? For a nominal field like <code>pitch_name</code>, which order would you use?</div>
+</section>
+
+<section id="helper">
+  <h2><span class="num">2</span>A helper for the boilerplate</h2>
+  <p>Half of example 1.2 is margins, axes and labels, and every chart on this page would repeat it. So from here on, every example has a few helper functions preloaded, defined in <a href="helpers.js">helpers.js</a>. They contain no magic: each one is the plain D3 you already wrote, wrapped in a function.</p>
+  <div class="table-wrap"><table class="fields">
+    <tr><th>Helper</th><th>What it does</th></tr>
+    <tr><td><code>chart({x, y, width, height, title, xLabel, yLabel, …})</code></td><td>Appends an SVG with margins, axes and labels. You pass scales with a <em>domain</em>; it sets their <em>range</em>. Returns <code>{svg, x, y, width, height, margin}</code>.</td></tr>
+    <tr><td><code>row()</code></td><td>A flex container, so several charts sit side by side (pass it as <code>parent</code>).</td></tr>
+    <tr><td><code>pitchTypes</code>, <code>pitchColor</code></td><td>The five pitch types in a fixed order, and an ordinal color scale for them.</td></tr>
+    <tr><td><code>swatches(color)</code>, <code>ramp(color)</code></td><td>Legends for categorical and continuous color scales.</td></tr>
+    <tr><td><code>tooltip(marks, d =&gt; html)</code></td><td>Shows a tooltip when hovering the marks.</td></tr>
+    <tr><td><code>zone</code>, <code>strikeZone(chart)</code></td><td>The average strike zone in feet, and a function that draws it.</td></tr>
+    <tr><td><code>locationBins(rows, size)</code>, <code>cvd(color, kind)</code></td><td>Used on the <a href="color.html">Color</a> page and explained there: binning pitches by location, and simulating color vision deficiency.</td></tr>
+  </table></div>
+  <details class="solution"><summary>Show the helper functions</summary>
+    <pre class="helpers" data-helpers="place row chart swatches ramp tooltip strikeZone"></pre>
+  </details>
+  <p>Example 1.2 again, with the helper. What is left is the part that is specific to this chart: the data, the scales' domains and the marks.</p>
+  <figure class="example" data-mode="js" data-height="260" data-title="Example 2.1 · The same chart with chart()">
+  <script type="text/plain">
+    const counts = d3.cross([0, 1, 2], [0, 1, 2, 3], (strikes, balls) => `${balls}-${strikes}`);
+    const n = d3.rollup(pitches, g => g.length, d => `${d.balls}-${d.strikes}`);
+
+    const {svg, x, y} = chart({
+      x: d3.scaleBand().domain(counts).padding(0.15),
+      y: d3.scaleLinear().domain([0, d3.max(n.values())]).nice(),
+      height: 240, xLabel: "count (balls-strikes)", yLabel: "pitches"
+    });
+
+    const bars = svg.append("g").attr("fill", "#2a78d6").selectAll("rect").data(counts).join("rect")
+      .attr("x", c => x(c)).attr("y", c => y(n.get(c)))
+      .attr("width", x.bandwidth()).attr("height", c => y(0) - y(n.get(c)));
+    tooltip(bars, c => `<b>${c}</b>: ${n.get(c)} pitches`);
+  </script>
+  </figure>
+  <aside class="note">Watch out for one D3 shorthand. <code>d3.scaleLinear([0, 10], [0, 500])</code> sets the domain and the range, but <code>d3.scaleLinear([0, 10])</code> with a single argument sets the <em>range</em>, leaving the domain at its default of [0, 1]. The same goes for <code>scaleBand</code> and <code>scalePoint</code>. That is why the examples write <code>d3.scaleLinear().domain([0, 10])</code> and let <code>chart()</code> fill in the range.</aside>
+  <aside class="py">This is the same move as writing a plotting function around matplotlib's <code>fig, ax = plt.subplots()</code> and axis formatting. <code>chart()</code> returns the pieces you need to keep drawing, much as <code>subplots</code> returns <code>ax</code>.</aside>
+</section>
+
+<section id="channels">
+  <h2><span class="num">3</span>Marks and channels</h2>
+  <p>Every chart decomposes into <strong>marks</strong>, the geometric primitives, and <strong>channels</strong>, the visual properties of the marks that you set from data.</p>
+  <ul>
+    <li><strong>Marks</strong>: points (dots, symbols), lines (paths, links), areas (bars, cells, regions).</li>
+    <li><strong>Channels</strong>: position, length, angle, area, color lightness, saturation and hue, shape, and a few more (texture, orientation, motion).</li>
+  </ul>
+  <p>Channels are not equal. Two principles decide which to use:</p>
+  <ul>
+    <li><strong>Expressiveness</strong>: the channel should express everything in the data and nothing more. Ordered data needs an ordered channel. Hue and shape have no natural order, so they suit nominal fields only.</li>
+    <li><strong>Effectiveness</strong>: the most important field gets the channel people read most accurately. For quantities, experiments by Cleveland and McGill (1984) and many since give roughly this ranking: position on a common scale, position on unaligned scales, length, angle and slope, area, then color lightness and saturation.</li>
+  </ul>
+  <p>You can feel the ranking. Below are the same five numbers, the pitch counts of each type, drawn six ways. The labels are letters so you have only the marks to go on.</p>
+  <figure class="example" data-mode="js" data-height="400" data-title="Example 3.1 · Five numbers, six channels">
+  <script type="text/plain">
+    const data = pitchTypes.map((t, i) => ({label: "ABCDE"[i], n: pitches.filter(d => d.pitch_name === t).length}));
+    const max = d3.max(data, d => d.n);
+    const W = 210, H = 170, r = row();
+
+    function panel(title) {
+      const svg = r.append("svg").attr("width", W).attr("height", H).attr("font-family", "sans-serif").attr("font-size", 11);
+      svg.append("text").attr("y", 14).attr("font-weight", 600).attr("font-size", 12).text(title);
+      return svg;
+    }
+    const rows = d3.scaleBand(data.map(d => d.label), [26, H - 4]).padding(0.25);   // marks stacked vertically
+    const cols = d3.scaleBand(data.map(d => d.label), [14, W - 4]).padding(0.15);   // marks side by side
+    const len = d3.scaleLinear([0, max], [18, W - 10]);
+    const midRow = d => rows(d.label) + rows.bandwidth() / 2;
+    const midCol = d => cols(d.label) + cols.bandwidth() / 2;
+    const rowLabels = svg => svg.append("g").selectAll("text").data(data).join("text")
+      .attr("x", 4).attr("y", midRow).attr("dy", "0.35em").text(d => d.label);
+    const colLabels = svg => svg.append("g").selectAll("text").data(data).join("text")
+      .attr("x", midCol).attr("y", H - 6).attr("text-anchor", "middle").text(d => d.label);
+
+    // 1. Position on a common scale
+    const pos = panel("1. Position");
+    rowLabels(pos);
+    pos.append("g").selectAll("line").data(data).join("line").attr("stroke", "#e3e1da")
+      .attr("x1", len(0)).attr("x2", len(max)).attr("y1", midRow).attr("y2", midRow);
+    pos.append("g").selectAll("circle").data(data).join("circle")
+      .attr("cx", d => len(d.n)).attr("cy", midRow).attr("r", 5);
+
+    // 2. Length
+    const bar = panel("2. Length");
+    rowLabels(bar);
+    bar.append("g").selectAll("rect").data(data).join("rect")
+      .attr("x", len(0)).attr("y", d => rows(d.label)).attr("width", d => len(d.n) - len(0)).attr("height", rows.bandwidth());
+
+    // 3. Angle
+    const pie = panel("3. Angle");
+    const arcs = d3.pie().sort(null).value(d => d.n)(data);
+    const arc = d3.arc().innerRadius(0).outerRadius(62);
+    const g = pie.append("g").attr("transform", `translate(${W / 2},${H / 2 + 12})`);
+    g.selectAll("path").data(arcs).join("path").attr("d", arc).attr("fill", "#4c4b46").attr("stroke", "#fff");
+    g.selectAll("text").data(arcs).join("text").attr("transform", a => `translate(${arc.centroid(a)})`)
+      .attr("text-anchor", "middle").attr("dy", "0.35em").attr("fill", "#fff").text(a => a.data.label);
+
+    // 4. Area (radius from a square-root scale, so area is proportional to n)
+    const area = panel("4. Area");
+    const radius = d3.scaleSqrt([0, max], [0, cols.bandwidth() / 2]);
+    colLabels(area);
+    area.append("g").selectAll("circle").data(data).join("circle")
+      .attr("cx", midCol).attr("cy", H / 2 + 6).attr("r", d => radius(d.n));
+
+    // 5. Lightness
+    const light = panel("5. Lightness");
+    const grey = d3.scaleSequential([0, max], d3.interpolateGreys);
+    colLabels(light);
+    light.append("g").selectAll("rect").data(data).join("rect")
+      .attr("x", d => cols(d.label)).attr("y", 40).attr("width", cols.bandwidth()).attr("height", 90).attr("fill", d => grey(d.n));
+
+    // 6. Hue
+    const hue = panel("6. Hue");
+    const rainbow = d3.scaleSequential([0, max], d3.interpolateRainbow);
+    colLabels(hue);
+    hue.append("g").selectAll("rect").data(data).join("rect")
+      .attr("x", d => cols(d.label)).attr("y", 40).attr("width", cols.bandwidth()).attr("height", 90).attr("fill", d => rainbow(d.n));
+
+    // Estimate first: which is largest? About how many times bigger is A than E? Then uncomment:
+    // console.log(data.map(d => `${d.label} = ${d.n}`).join(", "));
+  </script>
+  </figure>
+  <p>In panels 1 and 2 you can read the order immediately and estimate ratios. With angles it is harder, with areas harder still, and lightness gives order but little sense of ratio. Hue gives neither: there is no reason green should be more than orange. That is the expressiveness failure: a rainbow on a quantity invites the reader to invent an order.</p>
+  <div class="exercise">Write down your estimate of A ÷ E from each panel, then uncomment the <code>console.log</code>. Which channels were you closest with? Then replace <code>d3.scaleSqrt</code> in panel 4 with <code>d3.scaleLinear</code> and see how much larger the differences look.</div>
+
+  <h3>Adding channels to one mark</h3>
+  <p>A point mark can carry several fields at once: two through position, and more through hue, shape and size. Each extra channel is cheaper to add than to read. Below, the location of every pitch as it crossed the plate, with the strike zone drawn in, then with one channel added per panel.</p>
+  <figure class="example" data-mode="js" data-height="640" data-title="Example 3.2 · Position, then hue, shape and size">
+  <script type="text/plain">
+    // 38 pixels per foot on both axes, so the strike zone is not distorted.
+    const r = row();
+    function panel(title) {
+      const c = chart({x: d3.scaleLinear().domain([-2.75, 2.75]), y: d3.scaleLinear().domain([-0.5, 5.5]), width: 270, height: 280,
+                       title, xTicks: 5, yTicks: 6, parent: r});
+      strikeZone(c);
+      return c;
+    }
+    const at = c => d => `translate(${c.x(d.plate_x)},${c.y(d.plate_z)})`;
+
+    // 1. Position only: plate_x and plate_z
+    const a = panel("1. Position");
+    a.svg.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("transform", at(a)).attr("r", 2.5).attr("fill", "#4c4b46").attr("fill-opacity", 0.5);
+
+    // 2. + hue for pitch type (nominal)
+    const b = panel("2. + hue: pitch type");
+    b.svg.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("transform", at(b)).attr("r", 2.5).attr("fill", d => pitchColor(d.pitch_name));
+
+    // 3. + shape for batter side (nominal)
+    const shape = d3.scaleOrdinal(["R", "L"], [d3.symbolCircle, d3.symbolTriangle]);
+    const c = panel("3. + shape: batter side");
+    c.svg.append("g").selectAll("path").data(pitches).join("path")
+      .attr("transform", at(c)).attr("d", d => d3.symbol(shape(d.stand), 22)()).attr("fill", d => pitchColor(d.pitch_name));
+
+    // 4. + size for exit velocity (quantitative), which only balls in play have
+    const size = d3.scaleSqrt([0, 115], [0, 6]);
+    const e = panel("4. + size: exit velocity");
+    e.svg.append("g").selectAll("path").data(pitches.filter(d => d.launch_speed !== null)).join("path")
+      .attr("transform", at(e)).attr("d", d => d3.symbol(shape(d.stand), Math.PI * size(d.launch_speed) ** 2)())
+      .attr("fill", d => pitchColor(d.pitch_name)).attr("fill-opacity", 0.6).attr("stroke", d => pitchColor(d.pitch_name));
+
+    swatches(pitchColor);
+    d3.select("body").append("div").style("font", "11px sans-serif").text("● right-handed batter   ▲ left-handed batter");
+  </script>
+  </figure>
+  <p>Panel 2 works: pitch types pop out as regions because hue is read pre-attentively. Panel 3 does not: finding "sliders to left-handed batters" means scanning for a conjunction of hue and shape, which the eye does one mark at a time. Panel 4 had to drop most of the pitches to show size at all. A rule of thumb: position for the two fields that matter most, one more channel for a nominal grouping, and if you need a fourth field, reach for small multiples (section 7) or interaction.</p>
+
+  <h3>Shape for pitch type</h3>
+  <p>Shape is the other channel for nominal data. It survives grayscale printing and color vision deficiencies, but the eye reads it more slowly than hue, and only a handful of shapes are easy to tell apart. D3 has two sets of symbols: <code>d3.symbolsFill</code>, meant to be filled, and <code>d3.symbolsStroke</code> (circle, plus, times, triangle, asterisk, square, diamond), meant to be drawn as outlines, which stay distinguishable when they overlap. An ordinal scale maps each pitch type to one of them, just as <code>pitchColor</code> maps it to a color.</p>
+  <p>Below, the pitches from one game, so that the marks do not pile up. Start with shape alone and try to find every curveball. Then switch the menu to color, and to shape and color together.</p>
+  <figure class="example" data-mode="js" data-height="440" data-title="Example 3.3 · Pitch type as symbols">
+  <script type="text/plain">
+    const game = pitches.filter(d => d.game_date === "2026-08-22");
+    const shape = d3.scaleOrdinal(pitchTypes, d3.symbolsStroke);    // circle, plus, times, triangle, asterisk
+
+    // Each encoding says which symbol and which stroke color a pitch gets.
+    const encodings = {
+      "shape": {symbol: t => shape(t), stroke: t => "#1d1d1b"},
+      "color": {symbol: t => d3.symbolCircle, stroke: t => pitchColor(t)},
+      "shape + color": {symbol: t => shape(t), stroke: t => pitchColor(t)}
+    };
+    const select = d3.select("body").append("label").style("font-size", "13px").text("encode pitch type with: ").append("select");
+    select.selectAll("option").data(Object.keys(encodings)).join("option").text(d => d);
+    const r = row().style("align-items", "center");
+
+    // 55 pixels per foot on both axes.
+    const c = chart({x: d3.scaleLinear().domain([-2.75, 2.75]), y: d3.scaleLinear().domain([-0.5, 5.5]), width: 360, height: 382,
+      title: `Pitch locations, ${game[0].game_date}`, xLabel: "plate_x (ft), catcher's view", xTicks: 5, parent: r});
+    strikeZone(c);
+    const marks = c.svg.append("g").attr("fill", "none").attr("stroke-width", 1.5)
+      .selectAll("path").data(game).join("path")
+      .attr("transform", d => `translate(${c.x(d.plate_x)},${c.y(d.plate_z)})`);
+    tooltip(marks, d => `<b>${d.pitch_name}</b><br>${d.release_speed} mph, ${d.description}`);
+
+    // A legend that uses the same symbols and colors as the marks.
+    const legend = r.append("svg").attr("width", 150).attr("height", 130).attr("font-family", "sans-serif").attr("font-size", 12);
+    const item = legend.selectAll("g").data(pitchTypes).join("g").attr("transform", (t, i) => `translate(12,${14 + i * 24})`);
+    const keys = item.append("path").attr("fill", "none").attr("stroke-width", 1.5);
+    item.append("text").attr("x", 16).attr("dy", "0.35em").text(t => t);
+
+    function draw(name) {
+      const {symbol, stroke} = encodings[name];
+      marks.attr("d", d => d3.symbol(symbol(d.pitch_name), 64)()).attr("stroke", d => stroke(d.pitch_name));
+      keys.attr("d", t => d3.symbol(symbol(t), 64)()).attr("stroke", t => stroke(t));
+    }
+    select.on("change", event => draw(event.target.value));
+    draw("shape");
+  </script>
+  </figure>
+  <p>With shape alone you have to look at the marks one by one: a plus and an asterisk, or a circle among crosses, do not pop out. With color the curveballs jump out at once, because hue is processed pre-attentively. Shape and color together is <em>redundant encoding</em>. It is no faster than color for most readers, but it keeps the chart readable in grayscale and for readers who cannot tell some of the colors apart. The <a href="color.html">Color</a> page has a menu that shows each chart as a reader with a color vision deficiency sees it; come back to this example with that in mind.</p>
+  <div class="exercise">Replace <code>d3.symbolsStroke</code> with <code>d3.symbolsFill</code> and set <code>.attr("fill", ...)</code> instead of the stroke. Which set is easier to read where marks overlap? Then show all five games instead of one: at what point does shape stop working?</div>
+
+  <h3>Expressiveness violations</h3>
+  <p>The most common violation is a mark or channel that implies structure the data does not have. A line connecting nominal categories says "these are in sequence, look at the trend".</p>
+  <figure class="example" data-mode="js" data-height="280" data-title="Example 3.4 · A line implies order; a dot plot does not">
+  <script type="text/plain">
+    const mean = d3.rollup(pitches, g => d3.mean(g, d => d.release_speed), d => d.pitch_name);
+    const alphabetical = [...mean.keys()].sort();
+    const byValue = d3.sort(mean.keys(), t => -mean.get(t));
+    const r = row();
+
+    // Wrong: pitch types are nominal, so the slopes between them mean nothing.
+    {
+      const {svg, x, y} = chart({x: d3.scalePoint().domain(alphabetical).padding(0.4), y: d3.scaleLinear().domain([76, 100]),
+        width: 330, height: 260, margin: {bottom: 64}, parent: r, title: "Line across categories (misleading)", yLabel: "mean speed (mph)"});
+      svg.select(".x-axis").selectAll("text").attr("transform", "rotate(-30)").attr("text-anchor", "end");
+      const line = d3.line().x(t => x(t)).y(t => y(mean.get(t)));
+      svg.append("path").attr("d", line(alphabetical)).attr("fill", "none").attr("stroke", "#2a78d6").attr("stroke-width", 2);
+      svg.append("g").selectAll("circle").data(alphabetical).join("circle")
+        .attr("cx", t => x(t)).attr("cy", t => y(mean.get(t))).attr("r", 4).attr("fill", "#2a78d6");
+    }
+
+    // Better: one dot per category, sorted by value. Position still encodes speed; nothing implies a sequence.
+    {
+      const {svg, x, y} = chart({x: d3.scaleLinear().domain([76, 100]), y: d3.scaleBand().domain(byValue).padding(0.5),
+        width: 330, height: 260, margin: {left: 110}, parent: r, title: "Dot plot, sorted", xLabel: "mean speed (mph)", grid: true});
+      svg.append("g").selectAll("circle").data(byValue).join("circle")
+        .attr("cx", t => x(mean.get(t))).attr("cy", t => y(t) + y.bandwidth() / 2).attr("r", 5).attr("fill", "#2a78d6");
+    }
+  </script>
+  </figure>
+  <div class="exercise">A line <em>is</em> appropriate for an ordinal x with equal steps. Change the left panel to mean speed by <code>inning</code>: group with <code>d3.rollup(..., d =&gt; d.inning)</code>, use <code>d3.range(1, 8)</code> as the domain, and keep the line.</div>
+</section>
+
+<section id="bars">
+  <h2><span class="num">4</span>Bar charts and dot plots</h2>
+  <p>Bar charts compare a quantity across categories: nominal or ordinal on one axis, quantitative length on the other. The questions to settle are how to order the bars, how to show a second categorical field, and whether the quantity should be a count or a share.</p>
+
+  <h3>Grouped, stacked, normalized</h3>
+  <p>Skubal throws to right-handed batters 404 times and left-handed batters 91 times in this sample. Suppose the question is: does he use a different pitch mix against lefties? Three ways to add the batter-side field:</p>
+  <figure class="example" data-mode="js" data-height="520" data-title="Example 4.1 · The same counts, three bar layouts">
+  <script type="text/plain">
+    const sides = ["R", "L"];
+    const sideName = {R: "vs right-handed", L: "vs left-handed"};
+    const n = d3.rollup(pitches, g => g.length, d => d.pitch_name, d => d.stand);
+    const get = (type, side) => n.get(type)?.get(side) ?? 0;
+    const r = row().style("align-items", "flex-start");
+
+    // 1. Grouped: two bars per type. Good for comparing R and L within a type.
+    {
+      const sideColor = d3.scaleOrdinal(sides, ["#4c4b46", "#b4b2aa"]);
+      const max = d3.max(pitchTypes, t => Math.max(get(t, "R"), get(t, "L")));
+      const {svg, x, y} = chart({x: d3.scaleLinear().domain([0, max]).nice(), y: d3.scaleBand().domain(pitchTypes).padding(0.2),
+        width: 330, height: 240, margin: {left: 104}, xTicks: 4, parent: r, title: "Grouped (count)"});
+      const inner = d3.scaleBand(sides, [0, y.bandwidth()]).padding(0.05);
+      svg.append("g").selectAll("g").data(pitchTypes).join("g").attr("transform", t => `translate(0,${y(t)})`)
+        .selectAll("rect").data(t => sides.map(s => ({s, v: get(t, s)}))).join("rect")
+        .attr("x", x(0)).attr("y", d => inner(d.s)).attr("height", inner.bandwidth())
+        .attr("width", d => x(d.v) - x(0)).attr("fill", d => sideColor(d.s));
+      swatches(d3.scaleOrdinal(sides.map(s => sideName[s]), sideColor.range()), {parent: r});
+    }
+
+    // One row per side, one column per type, for d3.stack.
+    const table = sides.map(side => ({side, ...Object.fromEntries(pitchTypes.map(t => [t, get(t, side)]))}));
+
+    // 2. Stacked: one bar per side. Totals are easy to compare; inner segments are not.
+    // 3. Normalized: the same with d3.stackOffsetExpand, so every bar sums to 1.
+    for (const [title, offset, format] of [["Stacked (count)", d3.stackOffsetNone, undefined],
+                                           ["Normalized (share)", d3.stackOffsetExpand, "%"]]) {
+      const layers = d3.stack().keys(pitchTypes).offset(offset)(table);
+      const {svg, x, y} = chart({x: d3.scaleLinear().domain([0, d3.max(layers.at(-1), d => d[1])]).nice(), y: d3.scaleBand().domain(sides).padding(0.3),
+        width: 330, height: 130, margin: {left: 104}, xTicks: 4, xFormat: format, yFormat: s => sideName[s], parent: r, title});
+      svg.append("g").selectAll("g").data(layers).join("g").attr("fill", layer => pitchColor(layer.key))
+        .selectAll("rect").data(layer => layer).join("rect")
+        .attr("x", d => x(d[0])).attr("width", d => x(d[1]) - x(d[0]))
+        .attr("y", d => y(d.data.side)).attr("height", y.bandwidth()).attr("stroke", "#fff");
+    }
+    swatches(pitchColor);
+  </script>
+  </figure>
+  <p>The grouped chart answers "against which side does he throw more sliders?", which is not the question: he throws more of <em>everything</em> to righties. The stacked counts are dominated by the same imbalance. Only the normalized chart answers the question, and the answer is clear: lefties see far more sinkers (about a third of their pitches, against 8% for righties) and hardly any sliders. <strong>Choose the denominator before you choose the chart.</strong></p>
+  <aside class="note">In the grouped chart batter side is shown with two greys rather than two of the pitch colors. The five pitch colors mean "pitch type" everywhere on this page and the next; reusing them for another field would make readers look for a connection that does not exist.</aside>
+
+  <h3>Dot plots when zero is not meaningful</h3>
+  <p>A bar encodes a value by its length, so a bar chart must start at zero (section 9 shows what happens otherwise). When the interesting variation is far from zero, such as speeds between 78 and 100 mph, use a dot, which encodes by position alone, and zoom the axis. A dot also leaves room to show spread.</p>
+  <figure class="example" data-mode="js" data-height="230" data-title="Example 4.2 · Median and 10th–90th percentile">
+  <script type="text/plain">
+    const stats = pitchTypes.map(type => {
+      const v = pitches.filter(d => d.pitch_name === type).map(d => d.release_speed).sort(d3.ascending);
+      return {type, p10: d3.quantileSorted(v, 0.1), median: d3.quantileSorted(v, 0.5), p90: d3.quantileSorted(v, 0.9)};
+    }).sort((a, b) => d3.descending(a.median, b.median));
+
+    const {svg, x, y} = chart({
+      x: d3.scaleLinear().domain(d3.extent(pitches, d => d.release_speed)).nice(),
+      y: d3.scaleBand().domain(stats.map(d => d.type)).padding(0.5),
+      height: 210, margin: {left: 110, right: 40}, grid: true,
+      title: "Release speed: median and 10th–90th percentile", xLabel: "release speed (mph)"
+    });
+    const g = svg.append("g").selectAll("g").data(stats).join("g")
+      .attr("transform", d => `translate(0,${y(d.type) + y.bandwidth() / 2})`);
+    g.append("line").attr("x1", d => x(d.p10)).attr("x2", d => x(d.p90))
+      .attr("stroke", d => pitchColor(d.type)).attr("stroke-width", 3).attr("stroke-linecap", "round");
+    g.append("circle").attr("cx", d => x(d.median)).attr("r", 5.5)
+      .attr("fill", d => pitchColor(d.type)).attr("stroke", "#fff").attr("stroke-width", 1.5);
+    g.append("text").attr("x", d => x(d.p90) + 8).attr("dy", "0.35em").attr("fill", "#4c4b46").text(d => d.median.toFixed(1));
+  </script>
+  </figure>
+  <div class="exercise">Add a second dot per row for pitches to left-handed batters, in a lighter tint of the same color, slightly below the first. Do his pitches get faster or slower against lefties?</div>
+</section>
+
+<section id="distributions">
+  <h2><span class="num">5</span>Distributions</h2>
+  <p>A mean or median hides the shape of the data. To show the shape of one quantitative field, bin it and count (a histogram), or draw every value (a strip plot), and summarize with quartiles (a box plot).</p>
+
+  <h3>Histograms and bin width</h3>
+  <p><code>d3.bin</code> groups values into intervals; each bin is an array of the rows that fell in it, with <code>x0</code> and <code>x1</code> as its bounds. The bin width is a design decision with no single right answer. Drag the slider.</p>
+  <figure class="example" data-mode="js" data-height="300" data-title="Example 5.1 · A histogram with adjustable bins">
+  <script type="text/plain">
+    const label = d3.select("body").append("label").style("font-size", "13px").text("bin width (mph): ");
+    const input = label.append("input").attr("type", "range").attr("min", 0.25).attr("max", 5).attr("step", 0.25).property("value", 1);
+    const value = label.append("b");
+    const holder = d3.select("body").append("div");
+
+    function draw(binWidth) {
+      holder.selectAll("*").remove();
+      value.text(binWidth);
+      const [lo, hi] = [76, 101];
+      const bins = d3.bin().value(d => d.release_speed).domain([lo, hi]).thresholds(d3.range(lo, hi, binWidth))(pitches);
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain([lo, hi]), y: d3.scaleLinear().domain([0, d3.max(bins, b => b.length)]).nice(),
+        parent: holder, width: 520, height: 240, grid: true, xLabel: "release speed (mph)", yLabel: "pitches"
+      });
+      const bars = svg.append("g").attr("fill", "#2a78d6").selectAll("rect").data(bins).join("rect")
+        .attr("x", b => x(b.x0) + 0.5).attr("width", b => Math.max(0, x(b.x1) - x(b.x0) - 1))
+        .attr("y", b => y(b.length)).attr("height", b => y(0) - y(b.length));
+      tooltip(bars, b => `${b.x0}–${b.x1} mph: ${b.length} pitches`);
+    }
+    input.on("input", event => draw(+event.target.value));
+    draw(1);
+  </script>
+  </figure>
+  <p>At 1 mph you can see three groups: curveballs around 80, changeups and sliders between 85 and 93, fastballs and sinkers between 94 and 100. At 5 mph the groups merge into a lump; at 0.25 mph noise looks like structure.</p>
+
+  <h3>Every value, and a summary</h3>
+  <p>To compare distributions across categories, put the category on one axis and draw each pitch as a dot, jittered vertically so the dots do not pile up. A box plot on top gives the quartiles. The jitter uses a seeded random generator so the picture is the same on every run.</p>
+  <figure class="example" data-mode="js" data-height="320" data-title="Example 5.2 · Strip plot with box plots">
+  <script type="text/plain">
+    const {svg, x, y} = chart({
+      x: d3.scaleLinear().domain([76, 101]), y: d3.scaleBand().domain(pitchTypes).padding(0.15),
+      width: 560, height: 300, margin: {left: 110}, grid: true, xLabel: "release speed (mph)"
+    });
+    const jitter = d3.randomUniform.source(d3.randomLcg(42))(-0.35, 0.35);
+    svg.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("cx", d => x(d.release_speed)).attr("cy", d => y(d.pitch_name) + y.bandwidth() * (0.5 + jitter()))
+      .attr("r", 2.5).attr("fill", d => pitchColor(d.pitch_name)).attr("fill-opacity", 0.5);
+
+    // Box: quartiles. Whiskers: the most extreme values within 1.5 × IQR of the box.
+    const h = y.bandwidth();
+    for (const type of pitchTypes) {
+      const v = pitches.filter(d => d.pitch_name === type).map(d => d.release_speed).sort(d3.ascending);
+      const [q1, q2, q3] = [0.25, 0.5, 0.75].map(p => d3.quantileSorted(v, p));
+      const lo = d3.min(v.filter(s => s >= q1 - 1.5 * (q3 - q1)));
+      const hi = d3.max(v.filter(s => s <= q3 + 1.5 * (q3 - q1)));
+      const g = svg.append("g").attr("transform", `translate(0,${y(type)})`).attr("stroke", "#1d1d1b").attr("fill", "none");
+      g.append("line").attr("x1", x(lo)).attr("x2", x(q1)).attr("y1", h / 2).attr("y2", h / 2);
+      g.append("line").attr("x1", x(q3)).attr("x2", x(hi)).attr("y1", h / 2).attr("y2", h / 2);
+      g.append("rect").attr("x", x(q1)).attr("width", x(q3) - x(q1)).attr("y", h * 0.25).attr("height", h * 0.5);
+      g.append("line").attr("x1", x(q2)).attr("x2", x(q2)).attr("y1", h * 0.25).attr("y2", h * 0.75).attr("stroke-width", 2.5);
+    }
+  </script>
+  </figure>
+  <div class="exercise">Replace <code>release_speed</code> with <code>release_spin_rate</code> (change the x domain to <code>[1600, 2800]</code>). Which pitch type has the widest spread in spin? Then remove the box plots: with only 31 curveballs, do you still need them?</div>
+</section>
+
+<section id="lines">
+  <h2><span class="num">6</span>Lines and areas</h2>
+  <p>A line connects measurements in order, so the reader looks at slope: rising, falling, flat. Use it when x is time or another ordered field with meaningful steps. The line itself is a claim that values between the points are sensible, so it needs enough points to be worth connecting.</p>
+
+  <h3>Many lines, one in focus</h3>
+  <p>Do starting pitchers lose velocity as the game goes on? Mean 4-seam fastball speed by inning, one grey line per game and the average of all five in color. Greying out the individual games keeps them as context without five competing colors.</p>
+  <figure class="example" data-mode="js" data-height="330" data-title="Example 6.1 · Fastball velocity by inning">
+  <script type="text/plain">
+    const fastballs = pitches.filter(d => d.pitch_name === "4-Seam Fastball");
+    const meanSpeed = g => d3.mean(g, d => d.release_speed);
+    const games = d3.rollups(fastballs, meanSpeed, d => d.game_date, d => d.inning)
+      .map(([date, innings]) => ({date, points: d3.sort(innings, p => p[0])}));
+    const all = d3.sort(d3.rollups(fastballs, meanSpeed, d => d.inning), p => p[0]);
+
+    const {svg, x, y} = chart({
+      x: d3.scaleLinear().domain([1, 7]), y: d3.scaleLinear().domain(d3.extent(games.flatMap(g => g.points), p => p[1])).nice(),
+      width: 520, height: 300, xTicks: 7, grid: true,
+      title: "4-seam fastball velocity by inning", xLabel: "inning", yLabel: "mean release speed (mph)"
+    });
+    const line = d3.line().x(p => x(p[0])).y(p => y(p[1]));
+
+    const paths = svg.append("g").attr("fill", "none").attr("stroke", "#b4b2aa").attr("stroke-width", 1.5)
+      .selectAll("path").data(games).join("path").attr("d", g => line(g.points));
+    tooltip(paths, g => `Game of ${g.date}`);
+
+    svg.append("path").attr("d", line(all)).attr("fill", "none").attr("stroke", "#2a78d6").attr("stroke-width", 2.5);
+    svg.append("g").selectAll("circle").data(all).join("circle")
+      .attr("cx", p => x(p[0])).attr("cy", p => y(p[1])).attr("r", 3.5).attr("fill", "#2a78d6");
+    svg.append("text").attr("x", x(all.at(-1)[0]) - 8).attr("y", y(all.at(-1)[1]) - 10).attr("text-anchor", "end")
+      .attr("fill", "#1c5cab").text("all five games");
+  </script>
+  </figure>
+  <p>Hover a grey line to see its game. The answer, for these five starts, is no: the average stays within half a mile per hour of 97 from the first inning to the sixth. The individual games bounce around more because each of their points averages only a handful of pitches. The seventh-inning bump is the least trustworthy point on the chart; check how many fastballs it averages over.</p>
+  <div class="exercise">Print the number of fastballs per inning with <code>d3.rollup(fastballs, g =&gt; g.length, d =&gt; d.inning)</code>. Then encode that count on the blue dots with a <code>d3.scaleSqrt</code> radius, so the reader can see which averages are weak.</div>
+
+  <h3>Stacked areas for composition over time</h3>
+  <p>An area chart is a line chart with the space below filled; stacked, it shows parts of a whole changing over an ordered axis. <code>d3.stack</code> computes the layers and <code>d3.area</code> draws each as a band between its lower and upper edge.</p>
+  <figure class="example" data-mode="js" data-height="330" data-title="Example 6.2 · Pitch mix by inning">
+  <script type="text/plain">
+    const innings = d3.range(1, 8);
+    const share = innings.map(inning => {
+      const rows = pitches.filter(d => d.inning === inning);
+      return {inning, ...Object.fromEntries(pitchTypes.map(t => [t, rows.filter(d => d.pitch_name === t).length / rows.length]))};
+    });
+    const layers = d3.stack().keys(pitchTypes)(share);
+
+    const {svg, x, y} = chart({
+      x: d3.scaleLinear().domain([1, 7]), y: d3.scaleLinear().domain([0, 1]), yFormat: "%", xTicks: 7,
+      width: 520, height: 280, title: "Share of pitches by type, per inning", xLabel: "inning"
+    });
+    const area = d3.area().x(d => x(d.data.inning)).y0(d => y(d[0])).y1(d => y(d[1]));
+    svg.append("g").selectAll("path").data(layers).join("path")
+      .attr("d", area).attr("fill", layer => pitchColor(layer.key)).attr("stroke", "#fff");
+    swatches(pitchColor);
+  </script>
+  </figure>
+  <p>Only the bottom layer and the total sit on a common baseline. The fastball share is easy to read; the slider band's thickness, floating in the middle, is not. Put the layer you most want read at the bottom.</p>
+  <div class="exercise">Change the <code>.keys(...)</code> order so that sliders are the bottom layer. Then try <code>d3.stack().offset(d3.stackOffsetWiggle)</code>, a streamgraph. What does it make easier to see, and what harder?</div>
+</section>
+
+<section id="scatter">
+  <h2><span class="num">7</span>Scatterplots</h2>
+  <p>A scatterplot shows the relationship between two quantitative fields: correlation, clusters, outliers. With 495 points, overplotting is the main problem, and the fixes are small marks, transparency and a thin light outline.</p>
+  <figure class="example" data-mode="js" data-height="370" data-title="Example 7.1 · Speed and spin">
+  <script type="text/plain">
+    const {svg, x, y} = chart({
+      x: d3.scaleLinear().domain(d3.extent(pitches, d => d.release_speed)).nice(),
+      y: d3.scaleLinear().domain(d3.extent(pitches, d => d.release_spin_rate)).nice(),
+      width: 520, height: 320, grid: true, xLabel: "release speed (mph)", yLabel: "spin rate (rpm)"
+    });
+    const dots = svg.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("cx", d => x(d.release_speed)).attr("cy", d => y(d.release_spin_rate)).attr("r", 3.5)
+      .attr("fill", d => pitchColor(d.pitch_name)).attr("fill-opacity", 0.7)
+      .attr("stroke", "#fff").attr("stroke-width", 0.5);
+    tooltip(dots, d => `<b>${d.pitch_name}</b><br>${d.release_speed} mph, ${d.release_spin_rate} rpm`);
+    swatches(pitchColor);
+  </script>
+  </figure>
+  <p>Each pitch type is its own cluster. Within each cluster, harder pitches tend to spin a little more (correlations between 0.2 and 0.4). A single correlation computed over all 495 pitches mixes that trend with the differences between types, and describes neither.</p>
+
+  <h3>Small multiples</h3>
+  <p>When colors overlap, split the chart: one panel per category, with the same scales everywhere and the other categories in light grey for context. Comparing panels is then comparing positions, which is the most accurate channel we have.</p>
+  <figure class="example" data-mode="js" data-height="470" data-title="Example 7.2 · Movement, one panel per pitch type">
+  <script type="text/plain">
+    // The same domains for every panel, so positions are comparable across panels.
+    const xDomain = d3.extent(pitches, d => d.pfx_x * 12), yDomain = d3.extent(pitches, d => d.pfx_z * 12);
+    d3.select("body").append("div").style("font", "12px sans-serif")
+      .text("Movement in inches: horizontal (x) and vertical (y), catcher's view");
+    const r = row();
+    for (const type of pitchTypes) {
+      const {svg, x, y} = chart({x: d3.scaleLinear().domain(xDomain).nice(), y: d3.scaleLinear().domain(yDomain).nice(),
+        width: 220, height: 200, title: type, xTicks: 4, yTicks: 4, grid: true, parent: r});
+      // Sort so this panel's type is drawn last, on top of the grey context.
+      svg.append("g").selectAll("circle").data(d3.sort(pitches, d => d.pitch_name === type)).join("circle")
+        .attr("cx", d => x(d.pfx_x * 12)).attr("cy", d => y(d.pfx_z * 12)).attr("r", 2.5)
+        .attr("fill", d => d.pitch_name === type ? pitchColor(type) : "#e3e1da");
+    }
+  </script>
+  </figure>
+
+  <h3>Size, and why area needs a square root</h3>
+  <p>A symbol map places marks at locations and encodes a quantity in their size. Here the locations are on the strike zone rather than a map of the world, and the quantity is exit velocity for the 173 pitches that were hit. The perceived size of a circle is its area. If radius is proportional to the value, area grows with the square: a 114 mph ball looks twelve times bigger than a 32 mph one, when it is three and a half times faster. Most balls in play here were hit between 70 and 110 mph, so the two maps look alike at a glance; compare their legends to see how far apart the two encodings are.</p>
+  <figure class="example" data-mode="js" data-height="400" data-title="Example 7.3 · Radius or area">
+  <script type="text/plain">
+    const hit = d3.sort(pitches.filter(d => d.launch_speed !== null), d => -d.launch_speed);  // big circles first, small on top
+    const r = row();
+    const sizes = [["Radius from scaleLinear (misleading)", d3.scaleLinear([0, 115], [0, 10])],
+                   ["Area from scaleSqrt", d3.scaleSqrt([0, 115], [0, 10])]];
+    for (const [title, radius] of sizes) {
+      // 60 pixels per foot on both axes.
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 300, height: 352, title, xTicks: 5, parent: r});
+      strikeZone(c);
+      const dots = c.svg.append("g").selectAll("circle").data(hit).join("circle")
+        .attr("cx", d => c.x(d.plate_x)).attr("cy", d => c.y(d.plate_z)).attr("r", d => radius(d.launch_speed))
+        .attr("fill", "#2a78d6").attr("fill-opacity", 0.25).attr("stroke", "#2a78d6");
+      tooltip(dots, d => `${d.launch_speed} mph off the bat`);
+      // A size legend: circles for three reference speeds.
+      const legend = c.svg.append("g").attr("transform", `translate(${c.x(1.05)},${c.y(4.6)})`);
+      [30, 70, 110].forEach((v, i) => {
+        legend.append("circle").attr("cx", i * 30).attr("r", radius(v)).attr("fill", "none").attr("stroke", "#4c4b46");
+        legend.append("text").attr("x", i * 30).attr("y", 24).attr("text-anchor", "middle").attr("font-size", 10).text(v);
+      });
+    }
+  </script>
+  </figure>
+  <div class="exercise">Contact happens mostly in and just below the zone. Color the circles by <code>pitch_name</code> with <code>pitchColor</code>. With both size and color on overlapping circles, can you still answer "which pitch type got hit hardest"? Which chart from section 4 would answer it better?</div>
+</section>
+
+<section id="matrix">
+  <h2><span class="num">8</span>Matrices and heatmaps</h2>
+  <p>A matrix puts one categorical field on each axis and encodes a quantity in each cell, usually with color. It trades accuracy for density: color is a weaker channel than position, but a matrix shows every combination at once and makes rows and columns easy to scan. Print the number in the cell when exact values matter.</p>
+
+  <h3>Two categorical fields</h3>
+  <p>What does Skubal throw in each count? Rows are pitch types, columns are counts, and each cell is the share of that count's pitches of that type, so every column sums to 100%.</p>
+  <figure class="example" data-mode="js" data-height="330" data-title="Example 8.1 · Pitch type by count">
+  <script type="text/plain">
+    const counts = d3.cross([0, 1, 2], [0, 1, 2, 3], (strikes, balls) => `${balls}-${strikes}`);
+    const key = d => `${d.balls}-${d.strikes}`;
+    const total = d3.rollup(pitches, g => g.length, key);
+    const n = d3.rollup(pitches, g => g.length, key, d => d.pitch_name);
+    const cells = d3.cross(pitchTypes, counts, (type, count) => ({type, count, share: (n.get(count).get(type) ?? 0) / total.get(count)}));
+
+    const {svg, x, y} = chart({
+      x: d3.scaleBand().domain(counts), y: d3.scaleBand().domain(pitchTypes), width: 620, height: 250,
+      margin: {left: 110, top: 42}, title: "Share of the pitches in each count, by type", xLabel: "count (balls-strikes)"
+    });
+    const color = d3.scaleSequential([0, 1], d3.interpolateBlues);
+    const cell = svg.append("g").selectAll("g").data(cells).join("g")
+      .attr("transform", d => `translate(${x(d.count)},${y(d.type)})`);
+    cell.append("rect").attr("width", x.bandwidth() - 2).attr("height", y.bandwidth() - 2).attr("fill", d => color(d.share));
+    // Dark text on light cells, white text on dark cells: pick by the cell's lightness.
+    cell.append("text").attr("x", x.bandwidth() / 2).attr("y", y.bandwidth() / 2).attr("dy", "0.35em")
+      .attr("text-anchor", "middle").attr("fill", d => d3.lab(color(d.share)).l > 60 ? "#1d1d1b" : "#fff")
+      .text(d => d3.format(".0%")(d.share));
+    // Sample size over each column. A 67% based on 3 pitches is 2 pitches.
+    svg.append("g").selectAll("text").data(counts).join("text")
+      .attr("x", c => x(c) + x.bandwidth() / 2).attr("y", 36).attr("text-anchor", "middle").attr("fill", "#7a7872")
+      .text(c => `n=${total.get(c)}`);
+    ramp(color, {title: "share of pitches in the count", tickFormat: "%"});
+  </script>
+  </figure>
+  <p>Read along the rows. The changeup climbs to nearly half of his pitches with two strikes, while the sinker almost disappears. The curveball is never thrown in 1-0, 2-0, 3-0, 3-1 or 3-2, the counts where he most needs a strike. The columns with small n, such as 3-0 and 3-1, are where the colors are least trustworthy.</p>
+
+  <h3>A heatmap over space</h3>
+  <p>When both axes are quantitative positions, bin them into a grid and color each cell by its count. This is the same idea as a histogram, in two dimensions, and it is the standard way to look at where pitches go.</p>
+  <figure class="example" data-mode="js" data-height="420" data-title="Example 8.2 · Where the pitches crossed the plate">
+  <script type="text/plain">
+    const cellSize = 0.5;                                  // feet; try 0.25 and 1
+    const x0 = -2, x1 = 2, z0 = 0, z1 = 5;
+    const nx = Math.round((x1 - x0) / cellSize), nz = Math.round((z1 - z0) / cellSize);
+    const inside = pitches.filter(d => d.plate_x >= x0 && d.plate_x < x1 && d.plate_z >= z0 && d.plate_z < z1);
+    const grid = d3.rollup(inside, g => g.length,
+      d => Math.floor((d.plate_x - x0) / cellSize), d => Math.floor((d.plate_z - z0) / cellSize));
+    const cells = d3.cross(d3.range(nx), d3.range(nz), (i, j) => ({i, j, n: grid.get(i)?.get(j) ?? 0}));
+
+    // 60 pixels per foot on both axes.
+    const c = chart({x: d3.scaleLinear().domain([x0, x1]), y: d3.scaleLinear().domain([z0, z1]), width: 300, height: 374,
+      margin: {left: 50, right: 10, top: 30, bottom: 44}, title: "Pitch locations, catcher's view",
+      xLabel: "plate_x (ft)", xTicks: 5});
+    const color = d3.scaleSequential([0, d3.max(cells, d => d.n)], d3.interpolateBlues);
+    const rects = c.svg.append("g").selectAll("rect").data(cells).join("rect")
+      .attr("x", d => c.x(x0 + d.i * cellSize)).attr("y", d => c.y(z0 + (d.j + 1) * cellSize))
+      .attr("width", c.x(cellSize) - c.x(0)).attr("height", c.y(0) - c.y(cellSize))
+      .attr("fill", d => color(d.n));
+    tooltip(rects, d => `${d.n} pitches`);
+    strikeZone(c);
+    ramp(color, {title: "pitches per cell", width: 280});
+    console.log(`${pitches.length - inside.length} pitches fell outside the grid`);
+  </script>
+  </figure>
+  <p>Binning loses the exact positions and depends on where the bin edges fall. A smooth alternative is a density estimate: <code>d3.contourDensity</code> places a small bump at every point, adds the bumps up and draws contour bands of the result. Below, one panel per pitch type. Each type's density is weighted to sum to one, so the colors compare <em>where</em> each pitch goes, not how often it is thrown.</p>
+  <figure class="example" data-mode="js" data-height="560" data-title="Example 8.3 · Location density by pitch type">
+  <script type="text/plain">
+    const W = 204, H = 232;                          // 36 pixels per foot on both axes
+    const r = row();
+    const panels = pitchTypes.map((type, i) => {
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: W, height: H,
+        title: type, xTicks: 4, yTicks: 5, parent: r});
+      const rows = pitches.filter(d => d.pitch_name === type);
+      const density = d3.contourDensity()
+        .x(d => c.x(d.plate_x)).y(d => c.y(d.plate_z)).weight(() => 1 / rows.length)
+        .size([W, H]).bandwidth(14)
+        .contours(rows);                             // a function from a threshold to a contour
+      return {c, density, i};
+    });
+
+    // One color scale for all panels. Thresholds are fractions of the highest density in any panel.
+    const max = d3.max(panels, p => p.density.max);
+    const color = d3.scaleSequential([0, 1], d3.interpolateBlues);
+    const thresholds = d3.range(1, 10).map(k => k / 10);
+
+    for (const {c, density, i} of panels) {
+      const {svg, margin: m} = c;
+      svg.append("clipPath").attr("id", `plot-${i}`).append("rect")
+        .attr("x", m.left).attr("y", m.top).attr("width", W - m.left - m.right).attr("height", H - m.top - m.bottom);
+      svg.append("g").attr("clip-path", `url(#plot-${i})`).selectAll("path").data(thresholds).join("path")
+        .attr("d", t => d3.geoPath()(density(t * max))).attr("fill", t => color(t));
+      strikeZone(c);
+    }
+    ramp(color, {title: "density, relative to the highest peak", width: 320, tickFormat: "%"});
+  </script>
+  </figure>
+  <p>Now the repertoire has a geography. The fastball lives in the upper half of the zone and the sinker in the middle. The slider sits low, and the changeup lower still, drifting to the catcher's right, away from right-handed batters. The curveball panel is lumpy because it rests on only 31 pitches: smoothing a small sample can draw confident-looking shapes that another five games would erase.</p>
+  <div class="exercise">Change <code>.bandwidth(14)</code> to 5 and to 30. Like the bin width in section 5, the bandwidth is a smoothing choice that can create or hide patterns. Then restrict each panel to two-strike counts with <code>d.strikes === 2</code>.</div>
+</section>
+
+<section id="honest">
+  <h2><span class="num">9</span>Scales that tell the truth</h2>
+  <p>Every chart so far had a scale whose domain someone chose. That choice can make a difference look huge or invisible without changing a single number.</p>
+
+  <h3>Bars start at zero</h3>
+  <p>The length of a bar is its value, so cutting off the bottom of the axis changes the ratios the reader sees.</p>
+  <figure class="example" data-mode="js" data-height="230" data-title="Example 9.1 · A truncated axis">
+  <script type="text/plain">
+    const median = pitchTypes.map(type => ({type, v: d3.median(pitches.filter(d => d.pitch_name === type), d => d.release_speed)}));
+    const r = row();
+    for (const [title, domain] of [["Axis from 78 mph (misleading)", [78, 100]], ["Axis from 0", [0, 100]]]) {
+      const {svg, x, y} = chart({x: d3.scaleLinear().domain(domain), y: d3.scaleBand().domain(pitchTypes).padding(0.25),
+        width: 330, height: 200, margin: {left: 104}, xTicks: 5, title, xLabel: "median speed (mph)", parent: r});
+      const left = x.range()[0];
+      svg.append("g").selectAll("rect").data(median).join("rect")
+        .attr("x", left).attr("y", d => y(d.type)).attr("height", y.bandwidth())
+        .attr("width", d => x(d.v) - left).attr("fill", d => pitchColor(d.type));
+    }
+  </script>
+  </figure>
+  <p>On the left, the fastball bar is seven times as long as the curveball bar; the fastball is 20% faster. If the differences matter and zero makes them invisible, the answer is not to truncate the bars but to change the mark: the dot plot in example 4.2 zooms honestly, because a dot encodes by position, not length.</p>
+
+  <h3>The domain sets the story on a line chart</h3>
+  <p>Lines encode by position and slope, so they need not start at zero. The domain still matters: it decides how big a change looks. Here is the "all five games" line from example 6.1 with three y domains.</p>
+  <figure class="example" data-mode="js" data-height="250" data-title="Example 9.2 · One line, three domains">
+  <script type="text/plain">
+    const fastballs = pitches.filter(d => d.pitch_name === "4-Seam Fastball");
+    const points = d3.sort(d3.rollups(fastballs, g => d3.mean(g, d => d.release_speed), d => d.inning), p => p[0]);
+    const r = row();
+    for (const [title, domain] of [["0 to 100", [0, 100]], ["90 to 100", [90, 100]], ["Fit to the data", d3.extent(points, p => p[1])]]) {
+      const {svg, x, y} = chart({x: d3.scaleLinear().domain([1, 7]), y: d3.scaleLinear().domain(domain).nice(), width: 220, height: 220,
+        xTicks: 7, yTicks: 5, title: `y: ${title}`, xLabel: "inning", parent: r});
+      svg.append("path").attr("d", d3.line().x(p => x(p[0])).y(p => y(p[1]))(points))
+        .attr("fill", "none").attr("stroke", "#2a78d6").attr("stroke-width", 2);
+    }
+  </script>
+  </figure>
+  <p>The first panel says nothing ever changes, the last says velocity swings wildly. Neither is a lie; both are uninformative about what matters. Choose the domain from the size of a difference that matters in the domain: for a pitcher, one mile per hour is a real change and a tenth is noise, so a range of about 90–100 mph is honest.</p>
+
+  <h3>Shared scales for small multiples</h3>
+  <p>Small multiples invite comparison across panels, which only works if the panels share scales. D3 will happily give each panel its own.</p>
+  <figure class="example" data-mode="js" data-height="400" data-title="Example 9.3 · Independent versus shared x scales">
+  <script type="text/plain">
+    function histograms(title, shared) {
+      d3.select("body").append("div").style("font", "600 12px sans-serif").style("margin-top", "6px").text(title);
+      const r = row();
+      for (const type of pitchTypes) {
+        const values = pitches.filter(d => d.pitch_name === type).map(d => d.release_speed);
+        const x = d3.scaleLinear().domain(shared ? [76, 101] : d3.extent(values)).nice();
+        const bins = d3.bin().domain(x.domain()).thresholds(d3.range(76, 101, 0.5))(values);   // half-mph bins in both rows
+        const c = chart({x, y: d3.scaleLinear().domain([0, d3.max(bins, b => b.length)]), width: 180, height: 130,
+          title: type, xTicks: 3, yTicks: 3, parent: r});
+        c.svg.append("g").attr("fill", pitchColor(type)).selectAll("rect").data(bins).join("rect")
+          .attr("x", b => c.x(b.x0) + 0.5).attr("width", b => Math.max(0, c.x(b.x1) - c.x(b.x0) - 1))
+          .attr("y", b => c.y(b.length)).attr("height", b => c.y(0) - c.y(b.length));
+      }
+    }
+    histograms("Each panel fit to its own data: every pitch type looks alike", false);
+    histograms("One shared x scale: the panels can be compared", true);
+  </script>
+  </figure>
+  <aside class="note">The y scales are still independent in both rows, because the question is about where speeds fall, not how many of each type there are. Decide per axis. When some values span orders of magnitude (populations, incomes, file sizes) use <code>d3.scaleLog</code>, and say so on the axis. A log scale has no zero, so it cannot be used for bars.</aside>
+</section>
+
+<section id="choosing">
+  <h2><span class="num">10</span>Choosing a graph</h2>
+  <p>Start from the question, identify the fields and their types, then pick the mark and channels. The pitch data gives an example of each basic graph:</p>
+  <div class="table-wrap"><table class="fields">
+    <tr><th>Question</th><th>Fields</th><th>Graph</th><th>Example</th></tr>
+    <tr><td>How often does he throw each pitch?</td><td>N, count</td><td>Bar chart, sorted</td><td>2.1, 4.1</td></tr>
+    <tr><td>Does the mix change against lefties?</td><td>N × N, share</td><td>Normalized stacked bar</td><td>4.1</td></tr>
+    <tr><td>How fast is each pitch type?</td><td>N × Q summary</td><td>Dot plot with intervals</td><td>4.2</td></tr>
+    <tr><td>What does the speed distribution look like?</td><td>Q (× N)</td><td>Histogram, strip plot, box plot</td><td>5.1, 5.2</td></tr>
+    <tr><td>Does velocity fade during the game?</td><td>O/T × Q</td><td>Line chart</td><td>6.1</td></tr>
+    <tr><td>How does the mix change over the game?</td><td>O/T × N, share</td><td>Stacked area</td><td>6.2</td></tr>
+    <tr><td>How do speed and spin relate?</td><td>Q × Q (× N)</td><td>Scatterplot, small multiples</td><td>7.1, 7.2</td></tr>
+    <tr><td>Where was the ball hit hardest?</td><td>S × Q</td><td>Symbol map</td><td>7.3</td></tr>
+    <tr><td>What does he throw in each count?</td><td>N × O, share</td><td>Matrix</td><td>8.1</td></tr>
+    <tr><td>Where does each pitch go?</td><td>S (× N)</td><td>Heatmap, density, small multiples</td><td>8.2, 8.3</td></tr>
+  </table></div>
+  <div class="exercise">Answer each question with a new chart. Name the field types and the graph before you write any code.
+    <ol>
+      <li>Is his changeup slower against left-handed batters than against right-handed batters?</li>
+      <li>Which pitch type gets the most swinging strikes per pitch thrown? (<code>description</code> is <code>"swinging_strike"</code> or <code>"swinging_strike_blocked"</code>.)</li>
+      <li>Does the pitch's horizontal location (<code>plate_x</code>) depend on the batter's side?</li>
+      <li>In which ball-strike counts do batters put the ball in play most often?</li>
+    </ol>
+  </div>
+  <p class="next-page"><strong>Next: <a href="color.html">Color</a>.</strong> Every chart above used color, mostly with pre-made choices. The next page takes the choices apart: what color can encode, how to pick scales for categories, magnitudes and differences, and how to check that everyone can read the result.</p>
+</section>
+
+<section id="cheatsheet">
+  <h2>Cheat sheet</h2>
+  <div class="table-wrap"><table class="fields cheatsheet">
+    <tr><th>Need</th><th>D3</th><th>Section</th></tr>
+    <tr><td>Group and summarize</td><td><code>d3.rollup</code>, <code>d3.rollups</code>, <code>d3.group</code>, <code>d3.cross</code>, <code>d3.sort</code></td><td>1, 4, 6</td></tr>
+    <tr><td>Summary statistics</td><td><code>d3.mean</code>, <code>d3.median</code>, <code>d3.quantileSorted</code>, <code>d3.extent</code></td><td>4, 5</td></tr>
+    <tr><td>Categorical positions</td><td><code>d3.scaleBand</code> (bars, cells), <code>d3.scalePoint</code> (dots)</td><td>1, 3, 8</td></tr>
+    <tr><td>Size by area</td><td><code>d3.scaleSqrt</code></td><td>3, 7</td></tr>
+    <tr><td>Histograms</td><td><code>d3.bin().domain().thresholds()</code></td><td>5, 9</td></tr>
+    <tr><td>Lines and areas</td><td><code>d3.line</code>, <code>d3.area</code></td><td>6</td></tr>
+    <tr><td>Stacking</td><td><code>d3.stack().keys().offset()</code>, <code>d3.stackOffsetExpand</code></td><td>4, 6</td></tr>
+    <tr><td>Pies and arcs</td><td><code>d3.pie</code>, <code>d3.arc</code></td><td>3</td></tr>
+    <tr><td>Symbols</td><td><code>d3.symbol</code>, <code>d3.symbolCircle</code>, <code>d3.symbolTriangle</code></td><td>3</td></tr>
+    <tr><td>Density</td><td><code>d3.contourDensity().contours()</code>, <code>d3.geoPath</code></td><td>8</td></tr>
+    <tr><td>Seeded randomness</td><td><code>d3.randomUniform.source(d3.randomLcg(seed))</code></td><td>5</td></tr>
+  </table></div>
+</section>
+
+<section id="data-ack">
+  <h2>Data acknowledgment</h2>
+  <p>The pitch data comes from <a href="https://baseballsavant.mlb.com">Baseball Savant</a>, Major League Baseball's Statcast site, and is copyright MLB Advanced Media, L.P. It was downloaded on September 8, 2026 via Statcast search (pitcher Tarik Skubal, regular season, August 8 to September 7, 2026). This excerpt of 495 pitches and 22 of the original 119 columns is included for teaching and non-commercial educational use. We claim no ownership of the data and do not redistribute the full dataset; download it from Baseball Savant for any other use. See <a href="https://baseballsavant.mlb.com/csv-docs">Statcast field definitions</a> for column meanings.</p>
+</section>
+
+<section id="license">
+  <h2>Acknowledgments and license</h2>
+  <p>The treatment of marks, channels, expressiveness and effectiveness follows Jock Mackinlay, "Automating the Design of Graphical Presentations of Relational Information" (1986); William Cleveland and Robert McGill, "Graphical Perception" (1984); and Tamara Munzner, <em>Visualization Analysis and Design</em> (2014). The format of this page follows <a href="index.html">A minimal D3 tutorial</a>.</p>
+  <p>Copyright © 2026 Claudio T. Silva. The prose is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> and the code under the MIT License; see <a href="LICENSE">LICENSE</a>. D3 is included under its ISC license. The pitch data is covered by neither license.</p>
+</section>
+</main>
+</div>
+<script src="tutorial.js"></script>
+</body>
+</html>

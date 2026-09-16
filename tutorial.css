@@ -60,3 +60,14 @@ figure.example button:hover { filter: brightness(.95); }
 figure.example .bar .hint { margin-left: auto; }
 figure.example iframe { display: block; width: 100%; border: 0; background: #fff; }
 .cheatsheet td code { white-space: nowrap; }
+
+/* Additions for the marks-and-color pages */
+figure.example .bar .vision-label { font-size: .8rem; color: var(--ink-2); }
+figure.example .bar select { font: .8rem var(--sans); margin-left: .2rem; }
+pre.helpers { max-height: 28rem; font-size: 12.5px; }
+.series-nav { display: flex; gap: .5rem; flex-wrap: wrap; margin: .2rem 0 1.2rem; font-size: .9rem; }
+.series-nav a, .series-nav span { padding: .2rem .6rem; border: 1px solid var(--rule); border-radius: 999px; text-decoration: none; }
+.series-nav span { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+details.solution { border: 1px solid var(--rule); border-radius: 8px; padding: .6rem 1rem; margin: 1.2rem 0; background: #fff; }
+details.solution summary { cursor: pointer; font-weight: 600; color: var(--accent-ink); }
+.next-page { margin-top: 3rem; padding: 1rem 1.2rem; border: 2px solid var(--ink); border-radius: 8px; font-size: 1.05rem; }

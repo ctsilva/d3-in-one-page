@@ -1,11 +1,12 @@
-This tutorial is dual-licensed by content type.
+These tutorials are dual-licensed by content type.
 
-PROSE (the explanatory text of index.html and the READMEs):
+PROSE (the explanatory text of index.html, marks.html, color.html and the READMEs):
   Creative Commons Attribution 4.0 International (CC BY 4.0)
   https://creativecommons.org/licenses/by/4.0/
   Copyright (c) 2026 Claudio T. Silva
 
-CODE (the examples in index.html, tutorial.js, tutorial.css, data/make_data.py):
+CODE (the examples in index.html, marks.html and color.html, helpers.js, tutorial.js,
+      tutorial.css, data/make_data.py):
   MIT License
 
   Copyright (c) 2026 Claudio T. Silva

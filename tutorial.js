@@ -1,7 +1,9 @@
 // Turns every <figure class="example"> into an editable, runnable example.
 // The code lives in <script type="text/plain"> so no HTML escaping is needed.
 // Modes: "html" runs the text as the body of a page; "js" runs it as a script
-// after D3 and the Skubal data are loaded.
+// after D3 and the Skubal data are loaded. Pages with <body data-helpers> also load
+// helpers.js into every example; the D3 tutorial does not, so its examples can define
+// names like chart or row freely.
 
 const BASE_CSS = `
   body { margin: 12px; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #1d1d1b; background: #fff; }
@@ -49,6 +51,8 @@ const CSV_SHIM = `
   }
 `;
 
+const HELPERS = document.body.hasAttribute("data-helpers");
+
 function dedent(text) {
   const lines = text.replace(/^\n+/, "").replace(/\s+$/, "").split("\n");
   const indent = Math.min(...lines.filter(l => l.trim()).map(l => l.match(/^ */)[0].length));
@@ -58,9 +62,29 @@ function dedent(text) {
 function buildDoc(mode, code) {
   const head = `<meta charset="utf-8"><style>${BASE_CSS}</style>
     <script src="vendor/d3.v7.min.js"><\/script><script src="data/skubal.js"><\/script>
+    ${HELPERS ? '<script src="helpers.js"><\/script>' : ""}
     <script>${CONSOLE_SHIM}${CSV_SHIM}<\/script>`;
   const body = mode === "html" ? code : `<script>\n${code}\n<\/script>`;
   return `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
+}
+
+// Pages with <body data-vision> get a "View as" menu on every example. It filters the
+// output frame through a simulation of color vision deficiency (Machado, Oliveira and
+// Fernandes 2009, severity 1), applied in linear RGB, which is the SVG filter default.
+const VISION = document.body.hasAttribute("data-vision");
+const CVD = {
+  protanopia:   [0.152286, 1.052583, -0.204868, 0.114503, 0.786281, 0.099216, -0.003882, -0.048116, 1.051998],
+  deuteranopia: [0.367322, 0.860646, -0.227968, 0.280085, 0.672501, 0.047413, -0.011820, 0.042940, 0.968881],
+  tritanopia:   [1.255528, -0.076749, -0.178779, -0.078411, 0.930809, 0.147602, 0.004733, 0.691367, 0.303900],
+};
+const VISION_SELECT = `<label class="vision-label">View as <select class="vision">
+    <option value="">normal color vision</option>
+    ${Object.keys(CVD).map(k => `<option value="url(#cvd-${k})">${k}</option>`).join("")}
+    <option value="grayscale(1)">grayscale</option></select></label>`;
+if (VISION) {
+  const m = v => [v[0], v[1], v[2], 0, 0, v[3], v[4], v[5], 0, 0, v[6], v[7], v[8], 0, 0, 0, 0, 0, 1, 0].join(" ");
+  document.body.insertAdjacentHTML("afterbegin", `<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    ${Object.entries(CVD).map(([k, v]) => `<filter id="cvd-${k}"><feColorMatrix type="matrix" values="${m(v)}"/></filter>`).join("")}</svg>`);
 }
 
 function setup(figure, index) {
@@ -74,6 +98,7 @@ function setup(figure, index) {
     <figcaption><span>${title}</span><span class="mode">${mode === "html" ? "HTML + CSS" : "JavaScript + D3"}</span></figcaption>
     <textarea spellcheck="false" aria-label="${title} source code"></textarea>
     <div class="bar"><button class="run">Run ▶</button><button class="reset">Reset</button>
+      ${VISION ? VISION_SELECT : ""}
       <span class="hint">Edit, then Run or press ⌘/Ctrl + Enter</span></div>
     <iframe title="${title} output" style="height:${height}px"></iframe>`;
 
@@ -90,6 +115,9 @@ function setup(figure, index) {
   };
   frame.addEventListener("load", () => [50, 300, 1000, 2500].forEach(t => setTimeout(fit, t)));
   figure.querySelector(".run").addEventListener("click", run);
+  figure.querySelector("select.vision")?.addEventListener("change", e => {
+    frame.style.filter = e.target.value;
+  });
   figure.querySelector(".reset").addEventListener("click", () => { ta.value = original; run(); });
   ta.addEventListener("keydown", e => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); run(); }
@@ -102,6 +130,11 @@ function setup(figure, index) {
   });
   return run;
 }
+
+// <pre data-helpers> shows the source of the functions in helpers.js.
+document.querySelectorAll("pre[data-helpers]").forEach(pre => {
+  pre.textContent = pre.dataset.helpers.split(" ").map(name => String(window[name])).join("\n\n");
+});
 
 const runners = new Map();
 document.querySelectorAll("figure.example").forEach((fig, i) => runners.set(fig, setup(fig, i)));

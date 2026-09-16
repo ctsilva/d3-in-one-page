@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Color for visualization</title>
+  <link rel="stylesheet" href="tutorial.css">
+</head>
+<body data-helpers data-vision>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#intro">Introduction</a></li>
+    <li><a href="#jobs">1. Two jobs for color</a></li>
+    <li><a href="#spaces">2. Color spaces</a></li>
+    <li><a href="#categorical">3. Categorical color</a></li>
+    <li><a href="#sequential">4. Sequential color</a></li>
+    <li><a href="#diverging">5. Diverging color</a></li>
+    <li><a href="#binned">6. Binned color scales</a></li>
+    <li><a href="#context">7. Context, size and text</a></li>
+    <li><a href="#cvd">8. Color vision deficiency</a></li>
+    <li><a href="#fix">9. Fix this chart</a></li>
+    <li><a href="#cheatsheet">Cheat sheet</a></li>
+    <li><a href="#data-ack">Data acknowledgment</a></li>
+    <li><a href="#license">Acknowledgments and license</a></li>
+  </ol>
+</nav>
+
+<main>
+<section id="intro">
+  <p class="meta">InfoVis / VisML · lab · every example is editable</p>
+  <div class="series-nav">
+    <a href="index.html">0 · A minimal D3 tutorial</a>
+    <a href="marks.html">1 · Marks, channels and graphs</a>
+    <span>2 · Color</span>
+  </div>
+  <h1>Color for visualization</h1>
+  <p class="lede">Color is the channel people notice first and read least precisely. This lab takes apart the choices behind every colored chart: what the color is for, which space to build it in, which kind of scale fits the data, and whether everyone who looks at it can read it.</p>
+
+  <p>This page follows <a href="marks.html">Marks, channels and graphs</a> and uses the same setup: the 495 Skubal pitches in <code>pitches</code>, and the helpers <code>chart</code>, <code>row</code>, <code>swatches</code>, <code>ramp</code>, <code>tooltip</code> and <code>strikeZone</code>, described in <a href="marks.html#helper">section 2 of that page</a>. Two more helpers are added here: <code>locationBins</code>, introduced in section 4, and <code>cvd</code>, introduced in section 8.</p>
+
+  <h3>How to use this page</h3>
+  <p>As before, every code box is live: edit, then <strong>Run</strong> or ⌘/Ctrl + Enter. Each example also has a <strong>View as</strong> menu, which re-renders the output as it appears to someone with one of the three kinds of dichromacy, or in grayscale. Use it on every example, not just in section 8. (It works in Chrome, Edge and Firefox; Safari may ignore it.) Expect about two and a half hours.</p>
+</section>
+
+<section id="jobs">
+  <h2><span class="num">1</span>Two jobs for color</h2>
+  <p>Color does one of two jobs in a chart, and each needs a different kind of scale.</p>
+  <ul>
+    <li><strong>Label</strong>: say which category a mark belongs to. The colors should be as different from each other as possible, with none standing out more than the others. The difference is mostly in <em>hue</em>.</li>
+    <li><strong>Quantify</strong>: say how much. The colors should form an obvious order, with equal steps in the data looking like equal steps in color. The order is carried mostly by <em>lightness</em>.</li>
+  </ul>
+  <p>Below, pitch locations colored both ways. On the left, hue labels the pitch type; on the right, a sequential scale shows release speed.</p>
+  <figure class="example" data-mode="js" data-height="380" data-title="Example 1.1 · Color to label, color to quantify">
+  <script type="text/plain">
+    const r = row();
+    function panel(title) {
+      const col = r.append("div");
+      const c = chart({x: d3.scaleLinear().domain([-2.75, 2.75]), y: d3.scaleLinear().domain([-0.5, 5.5]),
+        width: 270, height: 280, title, xTicks: 5, parent: col});
+      strikeZone(c);
+      return {c, col};
+    }
+    const dots = ({c}, fill) => c.svg.append("g").selectAll("circle").data(pitches).join("circle")
+      .attr("cx", d => c.x(d.plate_x)).attr("cy", d => c.y(d.plate_z)).attr("r", 3).attr("fill", fill);
+
+    // Label: an ordinal scale of distinct hues.
+    const left = panel("Label: pitch type");
+    dots(left, d => pitchColor(d.pitch_name));
+    swatches(pitchColor, {parent: left.col}).style("max-width", "270px");
+
+    // Quantify: a sequential scale, dark (slow) to light (fast).
+    const speed = d3.scaleSequential(d3.extent(pitches, d => d.release_speed), d3.interpolateViridis);
+    const right = panel("Quantify: release speed");
+    dots(right, d => speed(d.release_speed));
+    ramp(speed, {title: "release speed (mph)", width: 260, parent: right.col});
+  </script>
+  </figure>
+  <p>Each chart does its own job and fails at the other. On the left you can find the changeups instantly, but you cannot tell which dots are fast. On the right the fast pitches up in the zone stand out, but you cannot pick out sliders from changeups, because their speeds overlap. Before choosing colors, decide which question the color should answer.</p>
+</section>
+
+<section id="spaces">
+  <h2><span class="num">2</span>Color spaces</h2>
+  <p>A color space is a way of naming a color with three numbers. D3 supports several, and converts between them.</p>
+  <ul>
+    <li><strong>RGB</strong> (<code>d3.rgb</code>): how much red, green and blue light the screen emits. How displays work, not how people see.</li>
+    <li><strong>HSL</strong> (<code>d3.hsl</code>): hue, saturation, lightness. A rearrangement of RGB that is easier to reason about, but its "lightness" is not the lightness you perceive.</li>
+    <li><strong>CIELAB</strong> (<code>d3.lab</code>): L* is perceived lightness from 0 (black) to 100 (white); a* and b* are the red–green and yellow–blue opponent axes of human vision. Designed so equal distances look roughly like equal differences.</li>
+    <li><strong>HCL</strong> (<code>d3.hcl</code>): the same space in polar form: hue angle, chroma (colorfulness) and luminance L*. The most convenient space for designing color scales.</li>
+  </ul>
+
+  <h3>HSL lightness is not lightness</h3>
+  <p>Six colors, all with HSL saturation 100% and lightness 50%. Under each is the grey with the same CIELAB lightness L*, which is what the color contributes to contrast and legibility.</p>
+  <figure class="example" data-mode="js" data-height="210" data-title="Example 2.1 · Same HSL lightness, very different L*">
+  <script type="text/plain">
+    const colors = [0, 60, 120, 180, 240, 300].map(h => d3.hsl(h, 1, 0.5));
+    const W = 100;
+    const svg = d3.select("body").append("svg").attr("width", colors.length * W).attr("height", 190)
+      .attr("font-family", "sans-serif").attr("font-size", 11);
+    const g = svg.selectAll("g").data(colors).join("g").attr("transform", (d, i) => `translate(${i * W},0)`);
+    g.append("rect").attr("width", W - 8).attr("height", 60).attr("fill", d => d);
+    g.append("rect").attr("y", 64).attr("width", W - 8).attr("height", 60).attr("fill", d => d3.lab(d3.lab(d).l, 0, 0));
+    g.append("text").attr("y", 142).text(d => d.formatHex());
+    g.append("text").attr("y", 158).text(d => `HSL: h ${d.h}, l ${d.l}`);
+    g.append("text").attr("y", 174).attr("font-weight", 600).text(d => `L* = ${d3.lab(d).l.toFixed(0)}`);
+  </script>
+  </figure>
+  <p>Yellow is nearly white in lightness and blue is nearly black, although HSL calls them equal. This is why yellow text on white is unreadable, why pure blue on black is hard to see, and why a rainbow scale has a bright band in the middle that the eye reads as a feature of the data.</p>
+  <div class="exercise">Use <code>d3.hcl(h, 60, 65)</code> instead of <code>d3.hsl(h, 1, 0.5)</code>: hue varies, chroma and luminance are fixed. How do the greys compare now? Why do some of these colors look duller than the HSL ones? (Hint: not every combination of hue, chroma and lightness can be shown on a screen, and D3 clips the ones that cannot.)</div>
+
+  <h3>Interpolating between two colors</h3>
+  <p>A continuous color scale blends between colors, and the space the blend happens in changes the result. Under each strip is its L* along the way. Pick your own endpoints with the color inputs.</p>
+  <figure class="example" data-mode="js" data-height="470" data-title="Example 2.2 · One pair of colors, four interpolations">
+  <script type="text/plain">
+    const controls = d3.select("body").append("div").style("font-size", "13px").style("margin-bottom", "6px");
+    const from = controls.append("label").text("from ").append("input").attr("type", "color").property("value", "#1b3a6b");
+    const to = controls.append("label").text("   to ").append("input").attr("type", "color").property("value", "#f5d547");
+    const holder = d3.select("body").append("div");
+    const methods = {
+      "RGB · d3.interpolateRgb": d3.interpolateRgb, "HSL · d3.interpolateHsl": d3.interpolateHsl,
+      "CIELAB · d3.interpolateLab": d3.interpolateLab, "HCL · d3.interpolateHcl": d3.interpolateHcl
+    };
+
+    function draw() {
+      holder.selectAll("*").remove();
+      const W = 560, ts = d3.range(0, 101).map(i => i / 100);
+      for (const [name, method] of Object.entries(methods)) {
+        const color = method(from.property("value"), to.property("value"));
+        const svg = holder.append("svg").attr("width", W + 40).attr("height", 104)
+          .attr("font-family", "sans-serif").attr("font-size", 11).style("display", "block");
+        svg.append("text").attr("y", 12).attr("font-weight", 600).text(name);
+        const x = d3.scaleLinear([0, 1], [30, W]);
+        svg.append("g").selectAll("rect").data(ts).join("rect")
+          .attr("x", t => x(t)).attr("y", 18).attr("width", (W - 30) / 100 + 1).attr("height", 26).attr("fill", t => color(t));
+        const y = d3.scaleLinear([0, 100], [100, 50]);
+        svg.append("g").attr("transform", "translate(30,0)").call(d3.axisLeft(y).tickValues([0, 50, 100]).tickSize(3));
+        svg.append("path").attr("fill", "none").attr("stroke", "#1d1d1b").attr("stroke-width", 1.5)
+          .attr("d", d3.line().x(t => x(t)).y(t => y(d3.lab(color(t)).l))(ts));
+        svg.append("text").attr("x", W + 4).attr("y", 78).attr("fill", "#7a7872").text("L*");
+      }
+    }
+    from.on("input", draw);
+    to.on("input", draw);
+    draw();
+  </script>
+  </figure>
+  <p>RGB gives a greyish, washed-out middle. HSL travels around the hue wheel, through bright greens that belong to neither endpoint, and its lightness climbs unevenly and overshoots the end. Lab and HCL make lightness change smoothly from one end to the other. HCL also keeps colorfulness up, but it too walks around the hue wheel, so it can pass through unrelated hues. For scales that show quantities, interpolate in Lab or HCL, or better, use the ready-made scales in the next sections, which were designed with these problems in mind.</p>
+  <div class="exercise">Set the endpoints to a dark blue and a light yellow. Which interpolation gives the steadiest rise in L*? Now set both endpoints to colors with the same lightness, for example red <code>#e41a1c</code> and green <code>#4daf4a</code>. What happens to the L* line, and what does that mean for a scale built from those two colors?</div>
+</section>
+
+<section id="categorical">
+  <h2><span class="num">3</span>Categorical color</h2>
+  <p>For labels, you want colors that are easy to tell apart and roughly equal in visual weight, so that no category looks more important than the others. In practice that means different hues with similar lightness and chroma. D3 includes the well-tested palettes from ColorBrewer and Tableau; you rarely need to invent one.</p>
+  <figure class="example" data-mode="js" data-height="360" data-title="Example 3.1 · D3's categorical schemes, and their lightness">
+  <script type="text/plain">
+    const schemes = {
+      "pitchColor (this site)": pitchColor.range(),
+      "schemeObservable10": d3.schemeObservable10,
+      "schemeTableau10": d3.schemeTableau10,
+      "schemeCategory10": d3.schemeCategory10,
+      "schemeSet1": d3.schemeSet1,
+      "schemeSet2": d3.schemeSet2,
+      "schemeDark2": d3.schemeDark2,
+      "schemePastel1": d3.schemePastel1,
+      "schemePaired": d3.schemePaired
+    };
+    const rowH = 34, S = 20;
+    const svg = d3.select("body").append("svg").attr("width", 690).attr("height", 30 + rowH * Object.keys(schemes).length)
+      .attr("font-family", "sans-serif").attr("font-size", 11);
+    const L = d3.scaleLinear([0, 100], [440, 680]);        // a small L* axis on the right
+    svg.append("g").attr("transform", "translate(0,22)").call(d3.axisTop(L).ticks(5).tickSize(3));
+    svg.append("text").attr("x", 440).attr("y", 8).attr("fill", "#7a7872").text("L* of each color");
+
+    Object.entries(schemes).forEach(([name, colors], i) => {
+      const g = svg.append("g").attr("transform", `translate(0,${30 + i * rowH})`);
+      g.append("text").attr("y", S / 2).attr("dy", "0.35em").text(name);
+      g.selectAll("rect").data(colors).join("rect")
+        .attr("x", (c, j) => 150 + j * (S + 2)).attr("width", S).attr("height", S).attr("rx", 2).attr("fill", c => c);
+      g.append("line").attr("x1", L(0)).attr("x2", L(100)).attr("y1", S / 2).attr("y2", S / 2).attr("stroke", "#e3e1da");
+      g.selectAll("circle").data(colors).join("circle")
+        .attr("cx", c => L(d3.lab(c).l)).attr("cy", S / 2).attr("r", 5).attr("fill", c => c).attr("stroke", "#1d1d1b").attr("stroke-width", 0.5);
+    });
+  </script>
+  </figure>
+  <p>Palettes whose dots cluster, such as Tableau10, Observable10 and Dark2, have even visual weight. Set1 has a yellow near L* 100, which will vanish on a white background, next to much darker reds, blues and purples. Pastel1 is uniformly light, which is fine for large areas and too faint for small dots. Paired is built from light–dark pairs for data that come in pairs, such as before and after.</p>
+
+  <h3>Trying palettes on real marks</h3>
+  <p>A palette only matters on a chart. Change the palette with the menu, and check each one with the <strong>View as</strong> menu under the code, especially the last option, which uses red and green for neighboring categories.</p>
+  <figure class="example" data-mode="js" data-height="380" data-title="Example 3.2 · A palette picker">
+  <script type="text/plain">
+    const palettes = {
+      "pitchColor": pitchColor.range(), "schemeTableau10": d3.schemeTableau10, "schemeSet1": d3.schemeSet1,
+      "schemePastel1": d3.schemePastel1, "schemeDark2": d3.schemeDark2,
+      "red and green": ["#1a9641", "#d7191c", "#a6d96a", "#fdae61", "#8c8c8c"]
+    };
+    const select = d3.select("body").append("label").style("font-size", "13px").text("palette: ").append("select");
+    select.selectAll("option").data(Object.keys(palettes)).join("option").text(d => d);
+    const holder = d3.select("body").append("div");
+
+    function draw(name) {
+      holder.selectAll("*").remove();
+      const color = d3.scaleOrdinal(pitchTypes, palettes[name]);
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain(d3.extent(pitches, d => d.pfx_x * 12)).nice(),
+        y: d3.scaleLinear().domain(d3.extent(pitches, d => d.pfx_z * 12)).nice(),
+        width: 460, height: 290, grid: true, parent: holder,
+        xLabel: "horizontal movement (in)", yLabel: "vertical movement (in)"
+      });
+      svg.append("g").selectAll("circle").data(pitches).join("circle")
+        .attr("cx", d => x(d.pfx_x * 12)).attr("cy", d => y(d.pfx_z * 12)).attr("r", 3.5)
+        .attr("fill", d => color(d.pitch_name)).attr("stroke", "#fff").attr("stroke-width", 0.5);
+      swatches(color, {parent: holder});
+    }
+    select.on("change", event => draw(event.target.value));
+    draw("pitchColor");
+  </script>
+  </figure>
+  <aside class="note">The pitch types here form separate clusters, so even a poor palette is partly rescued by position. Colors are hardest to tell apart when marks are small, intermixed and far apart on the page. Judge a palette on the hardest chart it will be used in.</aside>
+
+  <h3>How many categories?</h3>
+  <p>Beyond about six to eight hues, people stop recognizing colors at a glance and start matching each mark against the legend. The field <code>description</code> has nine values. The fix is rarely a bigger palette; it is usually fewer, more meaningful groups.</p>
+  <figure class="example" data-mode="js" data-height="450" data-title="Example 3.3 · Nine categories, or four">
+  <script type="text/plain">
+    const r = row().style("align-items", "flex-start");
+    function panel(title, color, key) {
+      const col = r.append("div").style("width", "300px");
+      const c = chart({x: d3.scaleLinear().domain([-2.75, 2.75]), y: d3.scaleLinear().domain([-0.5, 5.5]),
+        width: 270, height: 280, title, xTicks: 5, parent: col});
+      strikeZone(c);
+      c.svg.append("g").selectAll("circle").data(pitches).join("circle")
+        .attr("cx", d => c.x(d.plate_x)).attr("cy", d => c.y(d.plate_z)).attr("r", 3).attr("fill", d => color(key(d)));
+      swatches(color, {parent: col});
+    }
+
+    // Nine raw values, ten-color palette.
+    const descriptions = Array.from(new Set(pitches.map(d => d.description))).sort();
+    panel("Nine outcomes", d3.scaleOrdinal(descriptions, d3.schemeCategory10), d => d.description);
+
+    // Four groups that match the question "what happened?". Balls are grey: they are the "nothing happened" case.
+    const group = {ball: "ball", blocked_ball: "ball", hit_by_pitch: "ball", called_strike: "called strike",
+      swinging_strike: "swinging strike", swinging_strike_blocked: "swinging strike", foul_tip: "swinging strike",
+      foul: "contact", hit_into_play: "contact"};
+    const outcome = d3.scaleOrdinal(["ball", "called strike", "swinging strike", "contact"], ["#c9c7bf", "#0072b2", "#d55e00", "#009e73"]);
+    panel("Four groups", outcome, d => group[d.description]);
+  </script>
+  </figure>
+  <p>On the left, try to find the called strikes: you have to check the legend, then hunt. On the right the structure is visible without effort: balls surround the zone, called strikes and contact fill it, and many swinging strikes are outside it, where batters chased. Grouping is a data decision that makes the color decision easy. The four colors on the right come from the Okabe–Ito palette, designed to stay distinct for viewers with color vision deficiencies.</p>
+  <div class="exercise">Some pitches went badly for Skubal: the ones hit hard. Add a fifth group, <code>"hard contact"</code>, for pitches with <code>launch_speed &gt;= 95</code>, and give it a color that stands out from the other four without being confused with them. Check your choice with <strong>View as</strong>.</div>
+
+  <h3>Emphasis: use color sparingly</h3>
+  <p>Every saturated color competes for attention. If the chart has one message, give color to that message and grey to the rest. Here is the share of each pitch type's pitches that got a swing and a miss, three ways.</p>
+  <figure class="example" data-mode="js" data-height="480" data-title="Example 3.4 · Color for everything, by accident, or on purpose">
+  <script type="text/plain">
+    const whiff = new Set(["swinging_strike", "swinging_strike_blocked"]);
+    const rate = d3.sort(pitchTypes.map(type => {
+      const rows = pitches.filter(d => d.pitch_name === type);
+      return {type, rate: rows.filter(d => whiff.has(d.description)).length / rows.length};
+    }), d => -d.rate);
+    const r = row();
+
+    function bars(title, fill) {
+      const {svg, x, y} = chart({x: d3.scaleLinear().domain([0, 0.25]), y: d3.scaleBand().domain(rate.map(d => d.type)).padding(0.25),
+        width: 330, height: 222, margin: {left: 104, bottom: 44}, xTicks: 5, xFormat: "%", title, parent: r});
+      svg.append("g").selectAll("rect").data(rate).join("rect")
+        .attr("x", x(0)).attr("y", d => y(d.type)).attr("height", y.bandwidth())
+        .attr("width", d => x(d.rate) - x(0)).attr("fill", fill);
+      return {svg, x, y};
+    }
+
+    // 1. A hue per bar. Redundant with the axis labels, and nothing stands out.
+    bars("1. A color per bar", d => pitchColor(d.type));
+
+    // 2. Pastels with one saturated color: the eye goes to the slider, for no reason.
+    const accidental = d3.scaleOrdinal(pitchTypes, ["#b3cde3", "#ccebc5", "#decbe4", "#e41a1c", "#fed9a6"]);
+    bars("2. One loud color, by accident", d => accidental(d.type));
+
+    // 3. Grey, with the one bar that carries the message in color, and a label that says why.
+    const {svg, x, y} = bars("3. Color for the message", d => d.type === "Changeup" ? "#eb6834" : "#c9c7bf");
+    svg.append("g").selectAll("text").data(rate).join("text")
+      .attr("x", d => x(d.rate) + 4).attr("y", d => y(d.type) + y.bandwidth() / 2).attr("dy", "0.35em")
+      .attr("font-size", 10).attr("fill", d => d.type === "Changeup" ? "#1d1d1b" : "#7a7872")
+      .text(d => d3.format(".0%")(d.rate));
+    svg.append("text").attr("x", x(0.25)).attr("y", 218).attr("text-anchor", "end").attr("font-size", 11)
+      .text("The changeup misses bats twice as often");
+  </script>
+  </figure>
+  <p>Chart 1 is not wrong, and on a page where the pitch colors are used everywhere it keeps the types consistent. But it spends color to repeat what the axis already says. Chart 2 is the accident to avoid: one saturated color among pale ones makes readers look for a reason. Chart 3 uses color as an argument.</p>
+</section>
+
+<section id="sequential">
+  <h2><span class="num">4</span>Sequential color</h2>
+  <p>A sequential scale maps low to high values onto light to dark colors (or dark to light on a dark background). Its essential property is that lightness changes <em>monotonically</em>: always in the same direction, with no reversals, so the order of the colors is obvious without a legend. Hue may change along the way, which adds discriminability, as long as lightness keeps going the same way.</p>
+  <p>The examples in this section use a new helper, <code>locationBins(rows, size)</code>, which bins pitches into square cells over the strike zone area, as example 8.2 of the previous page did by hand. Each cell has its bounds and its <code>rows</code>.</p>
+  <figure class="example" data-mode="js" data-height="660" data-title="Example 4.1 · One heatmap, four color scales">
+  <script type="text/plain">
+    const cells = locationBins(pitches, 0.5);
+    const max = d3.max(cells, d => d.rows.length);
+    const maps = {Greys: d3.interpolateGreys, Blues: d3.interpolateBlues, Viridis: d3.interpolateViridis, Rainbow: d3.interpolateRainbow};
+    const r = row();
+    for (const [name, interpolator] of Object.entries(maps)) {
+      const col = r.append("div");
+      const color = d3.scaleSequential([0, max], interpolator);
+      // 50 pixels per foot on both axes
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 260, height: 302,
+        title: `d3.interpolate${name}`, xTicks: 5, parent: col});
+      const rects = c.svg.append("g").selectAll("rect").data(cells).join("rect")
+        .attr("x", d => c.x(d.x0)).attr("y", d => c.y(d.z1))
+        .attr("width", d => c.x(d.x1) - c.x(d.x0)).attr("height", d => c.y(d.z0) - c.y(d.z1))
+        .attr("fill", d => color(d.rows.length));
+      tooltip(rects, d => `${d.rows.length} pitches`);
+      strikeZone(c);
+      ramp(color, {title: "pitches per cell", width: 250, parent: col});
+    }
+  </script>
+  </figure>
+  <p>Greys and Blues read instantly: darker means more. Viridis changes hue as well as lightness, which lets you tell more levels apart. The rainbow is the familiar failure. Its hue order has to be learned from the legend, and <code>d3.interpolateRainbow</code> is also <em>cyclical</em>: it starts and ends at the same red, so the emptiest and the fullest cells get nearly the same color. Try <strong>View as grayscale</strong> on this example: the first three keep their order and the rainbow loses it.</p>
+
+  <h3>Look at the lightness</h3>
+  <p>You can check any color scale by plotting its L* from one end to the other. A good sequential scale gives a steady, straight-ish line.</p>
+  <figure class="example" data-mode="js" data-height="600" data-title="Example 4.2 · L* profiles of D3's sequential scales">
+  <script type="text/plain">
+    const interpolators = {
+      Greys: d3.interpolateGreys, Blues: d3.interpolateBlues, YlOrRd: d3.interpolateYlOrRd, Viridis: d3.interpolateViridis,
+      Cividis: d3.interpolateCividis, Magma: d3.interpolateMagma, Turbo: d3.interpolateTurbo, Rainbow: d3.interpolateRainbow
+    };
+    const rowH = 66, ts = d3.range(0, 101).map(i => i / 100);
+    const svg = d3.select("body").append("svg").attr("width", 690).attr("height", rowH * 8 + 10)
+      .attr("font-family", "sans-serif").attr("font-size", 11);
+    const x = d3.scaleLinear([0, 1], [0, 330]);
+    const px = d3.scaleLinear([0, 1], [390, 680]);
+    Object.entries(interpolators).forEach(([name, interpolate], i) => {
+      const g = svg.append("g").attr("transform", `translate(0,${i * rowH + 4})`);
+      g.append("text").attr("y", 10).attr("font-weight", 600).text(`d3.interpolate${name}`);
+      g.append("g").selectAll("rect").data(ts).join("rect")
+        .attr("x", t => x(t)).attr("y", 16).attr("width", 4.4).attr("height", 34).attr("fill", t => interpolate(t));
+      const y = d3.scaleLinear([0, 100], [58, 4]);
+      g.append("g").attr("transform", "translate(390,0)").call(d3.axisLeft(y).tickValues([0, 50, 100]).tickSize(3));
+      g.append("path").attr("fill", "none").attr("stroke", "#1d1d1b").attr("stroke-width", 1.5)
+        .attr("d", d3.line().x(t => px(t)).y(t => y(d3.lab(interpolate(t)).l))(ts));
+    });
+    svg.append("text").attr("x", 686).attr("y", 30).attr("text-anchor", "end").attr("fill", "#7a7872").text("L*");
+  </script>
+  </figure>
+  <p>The single-hue ColorBrewer scales (Greys, Blues) and the multi-hue YlOrRd fall steadily. Viridis, Cividis and Magma rise steadily and were designed to be perceptually uniform; Cividis was also designed to look nearly the same to viewers with red–green deficiencies. Turbo, an improved rainbow, goes up and then down: two data values far apart can share a lightness. The rainbow's L* wanders up and back down.</p>
+
+  <h3>False edges</h3>
+  <p>The worst effect of a rainbow is on smooth data. Below is a smooth estimate of pitch density: a Gaussian bump at every pitch, summed on a fine grid. It has no edges. The rainbow draws some anyway, where the hue passes quickly through bright cyan and yellow.</p>
+  <figure class="example" data-mode="js" data-height="400" data-title="Example 4.3 · A smooth surface, two color scales">
+  <script type="text/plain">
+    // Density on a 0.05 ft grid: at each cell center, sum a Gaussian bump (bandwidth 0.35 ft) for every pitch.
+    const step = 0.05, bw = 0.35, nx = 80, nz = 100;
+    const field = d3.cross(d3.range(nx), d3.range(nz), (i, j) => {
+      const cx = -2 + (i + 0.5) * step, cz = (j + 0.5) * step;
+      let sum = 0;
+      for (const d of pitches) sum += Math.exp(-((d.plate_x - cx) ** 2 + (d.plate_z - cz) ** 2) / (2 * bw * bw));
+      return {cx, cz, v: sum};
+    });
+    const max = d3.max(field, d => d.v);
+
+    const r = row();
+    for (const [name, interpolator] of [["Viridis", d3.interpolateViridis], ["Rainbow", d3.interpolateRainbow]]) {
+      const color = d3.scaleSequential([0, max], interpolator);
+      // 60 pixels per foot, so each grid cell is 3 pixels square
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 300, height: 352,
+        title: `d3.interpolate${name}`, xTicks: 5, parent: r});
+      c.svg.append("g").selectAll("rect").data(field).join("rect")
+        .attr("x", d => c.x(d.cx - step / 2)).attr("y", d => c.y(d.cz + step / 2))
+        .attr("width", 3.2).attr("height", 3.2).attr("fill", d => color(d.v));
+      strikeZone(c);
+    }
+  </script>
+  </figure>
+  <p>On the right, the jump from green to red around the zone looks like a boundary, and the blue center looks like a hollow, although it is the highest point of the surface. Neither exists. Viridis shows the same surface as what it is, a single smooth hill.</p>
+  <div class="exercise">Replace the rainbow with <code>d3.interpolateTurbo</code>. Is it better? Where does it still suggest structure that is not there? Then try <code>d3.interpolateGreys</code> and <code>d3.interpolateMagma</code>, and decide which you would publish.</div>
+</section>
+
+<section id="diverging">
+  <h2><span class="num">5</span>Diverging color</h2>
+  <p>A diverging scale has two sequential arms that meet at a light, neutral midpoint. Use it when the data has a meaningful middle value and both directions away from it matter: above or below average, gain or loss, more strikes than balls or fewer. <code>d3.scaleDiverging</code> takes a three-value domain, <code>[low, middle, high]</code>.</p>
+
+  <h3>A meaningful midpoint</h3>
+  <p>For each location cell with at least three pitches, the share of pitches that were strikes (anything but a ball: called and swinging strikes, fouls, and balls put in play). Fifty percent is a natural middle: above it the location favors the pitcher.</p>
+  <figure class="example" data-mode="js" data-height="400" data-title="Example 5.1 · Strike rate: sequential or diverging">
+  <script type="text/plain">
+    const isStrike = d => !["ball", "blocked_ball", "hit_by_pitch"].includes(d.description);
+    const cells = locationBins(pitches, 0.5).filter(d => d.rows.length >= 3)
+      .map(d => ({...d, rate: d.rows.filter(isStrike).length / d.rows.length}));
+
+    const r = row();
+    const scales = [["Sequential: Blues", d3.scaleSequential([0, 1], d3.interpolateBlues)],
+                    ["Diverging: RdBu, middle at 50%", d3.scaleDiverging([0, 0.5, 1], d3.interpolateRdBu)]];
+    for (const [title, color] of scales) {
+      const col = r.append("div");
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 280, height: 327,
+        title, xTicks: 5, parent: col});       // 55 pixels per foot
+      const rects = c.svg.append("g").selectAll("rect").data(cells).join("rect")
+        .attr("x", d => c.x(d.x0)).attr("y", d => c.y(d.z1))
+        .attr("width", d => c.x(d.x1) - c.x(d.x0)).attr("height", d => c.y(d.z0) - c.y(d.z1))
+        .attr("fill", d => color(d.rate));
+      tooltip(rects, d => `${d3.format(".0%")(d.rate)} strikes of ${d.rows.length} pitches`);
+      strikeZone(c);
+      ramp(color, {title: "share of pitches that were strikes", width: 270, tickFormat: "%", parent: col});
+    }
+  </script>
+  </figure>
+  <p>Both charts show the same numbers. Only the diverging one answers "where does a pitch become more likely to be a strike than a ball?" at a glance, and its answer roughly traces the strike zone: blue in and around it, red farther out. On the sequential chart, 45% and 55% are two nearly identical blues.</p>
+  <aside class="note">Do not use a diverging scale just because it looks richer. If the data has no meaningful middle, such as pitch counts or speeds, the neutral midpoint will make readers think values near it are "normal" and the arms are "unusual" in two opposite ways. That is a claim the data does not support.</aside>
+
+  <h3>Keep the arms balanced</h3>
+  <p>Each game and inning below shows how much faster or slower his fastball was than his average over all five games. Zero is the midpoint. The data runs from −1.4 to +0.9 mph, and there are two ways to set the domain.</p>
+  <figure class="example" data-mode="js" data-height="520" data-title="Example 5.2 · Symmetric and asymmetric diverging domains">
+  <script type="text/plain">
+    const fastballs = pitches.filter(d => d.pitch_name === "4-Seam Fastball");
+    const average = d3.mean(fastballs, d => d.release_speed);
+    const games = Array.from(new Set(pitches.map(d => d.game_date)));
+    const innings = d3.range(1, 8);
+    const stats = d3.rollup(fastballs, g => ({diff: d3.mean(g, d => d.release_speed) - average, n: g.length}),
+      d => d.game_date, d => d.inning);
+    const cells = d3.cross(games, innings, (game, inning) => ({game, inning, ...stats.get(game).get(inning)}))
+      .filter(d => d.n);                                       // skip innings with no fastballs
+    const [lo, hi] = d3.extent(cells, d => d.diff);
+    const m = Math.max(-lo, hi);
+
+    for (const [title, domain] of [["Symmetric: [−m, 0, +m]", [-m, 0, m]],
+                                   ["Data extent: [min, 0, max] (misleading)", [lo, 0, hi]]]) {
+      const color = d3.scaleDiverging(domain, d3.interpolateRdBu);
+      const {svg, x, y} = chart({x: d3.scaleBand().domain(innings), y: d3.scaleBand().domain(games),
+        width: 480, height: 190, margin: {left: 80}, title, xLabel: "inning"});
+      const cell = svg.append("g").selectAll("g").data(cells).join("g")
+        .attr("transform", d => `translate(${x(d.inning)},${y(d.game)})`);
+      cell.append("rect").attr("width", x.bandwidth() - 2).attr("height", y.bandwidth() - 2).attr("fill", d => color(d.diff));
+      cell.append("text").attr("x", x.bandwidth() / 2).attr("y", y.bandwidth() / 2).attr("dy", "0.35em")
+        .attr("text-anchor", "middle").attr("font-size", 10)
+        .attr("fill", d => d3.lab(color(d.diff)).l > 55 ? "#1d1d1b" : "#fff")
+        .text(d => Math.abs(d.diff) < 0.05 ? "0.0" : d3.format("+.1f")(d.diff));
+      tooltip(cell, d => `${d.game}, inning ${d.inning}: ${d.n} fastballs`);
+      ramp(color, {title: "mph faster (+) or slower (−) than his average fastball", width: 380, tickFormat: "+.1f"});
+    }
+  </script>
+  </figure>
+  <p>With the data's extent as the domain, each arm is stretched to its own maximum, so +0.9 is as dark a blue as −1.4 is a red. The reader compares colors and concludes the fast innings were as extreme as the slow ones. The symmetric domain gives equal differences equal colors. Note also the numbers: several cells average fewer than five pitches, so no color here should be trusted far. Hover to see the counts.</p>
+  <div class="exercise">RdBu uses red for "below". In baseball, a slower fastball may be a warning sign, but red–blue also suggests cold and hot, or political parties. Try <code>d3.interpolatePuOr</code> and <code>d3.interpolateBrBG</code>. Which reads most neutrally? Which would you use for a pitching coach?</div>
+</section>
+
+<section id="binned">
+  <h2><span class="num">6</span>Binned color scales</h2>
+  <p>A continuous scale gives every value its own color, which the eye cannot tell apart beyond a handful of levels anyway. A binned scale uses a few classes, each with a distinct color, so the legend can be read exactly. The choice is where to put the class breaks:</p>
+  <ul>
+    <li><code>d3.scaleQuantize</code>: breaks at equal intervals of the value.</li>
+    <li><code>d3.scaleQuantile</code>: breaks at quantiles, so each class holds the same number of cells.</li>
+    <li><code>d3.scaleThreshold</code>: breaks you choose, at values that mean something.</li>
+  </ul>
+  <figure class="example" data-mode="js" data-height="340" data-title="Example 6.1 · Quantize, quantile, threshold">
+  <script type="text/plain">
+    const cells = locationBins(pitches, 0.5);
+    const counts = cells.map(d => d.rows.length);
+    const scales = {
+      Quantize: d3.scaleQuantize([0, d3.max(counts)], d3.schemeBlues[5]),
+      Quantile: d3.scaleQuantile(counts.filter(n => n > 0), d3.schemeBlues[5]),
+      Threshold: d3.scaleThreshold([1, 5, 10, 20], d3.schemeBlues[5])
+    };
+    const r = row();
+    for (const [name, color] of Object.entries(scales)) {
+      const col = r.append("div");
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 212, height: 242,
+        title: `d3.scale${name}`, xTicks: 4, parent: col});       // 38 pixels per foot
+      c.svg.append("g").selectAll("rect").data(cells).join("rect")
+        .attr("x", d => c.x(d.x0)).attr("y", d => c.y(d.z1))
+        .attr("width", d => c.x(d.x1) - c.x(d.x0)).attr("height", d => c.y(d.z0) - c.y(d.z1))
+        .attr("fill", d => color(d.rows.length));
+      strikeZone(c);
+      ramp(color, {width: 205, tickFormat: ".0f", parent: col});
+      console.log(`${name}: cells per class, light to dark: ${color.range().map(c => counts.filter(n => color(n) === c).length).join(", ")}`);
+    }
+  </script>
+  </figure>
+  <p>The three maps disagree about how much of the area is "busy". Quantize reserves its darkest class for the few cells near the maximum. Quantile spreads the non-empty cells evenly over the classes, which maximizes contrast but makes a cell with 16 pitches look like one with 28. Threshold uses round numbers a reader can remember: none, a few, some, many, very many. Whichever you choose, the legend must show the breaks.</p>
+  <div class="exercise">Change the threshold breaks to <code>[1, 3, 6, 12]</code> and the palette to <code>d3.schemeYlGnBu[5]</code>. Then change the cell size in <code>locationBins</code> to <code>0.25</code>: which of the three scales keeps its meaning when the counts per cell change?</div>
+</section>
+
+<section id="context">
+  <h2><span class="num">7</span>Context, size and text</h2>
+  <p>A color does not have a fixed appearance. What surrounds it, how big the mark is, and what is written on it all change how it is read.</p>
+
+  <h3>Simultaneous contrast</h3>
+  <p>The six small squares below have exactly the same fill, <code>#808080</code>. Press the button to remove the gradient.</p>
+  <figure class="example" data-mode="js" data-height="230" data-title="Example 7.1 · The same grey, six times">
+  <script type="text/plain">
+    const svg = d3.select("body").append("svg").attr("width", 640).attr("height", 150);
+    const gradient = svg.append("defs").append("linearGradient").attr("id", "background");
+    gradient.append("stop").attr("offset", "0%").attr("stop-color", "#000");
+    gradient.append("stop").attr("offset", "100%").attr("stop-color", "#fff");
+    const background = svg.append("rect").attr("width", 640).attr("height", 150).attr("fill", "url(#background)");
+    svg.selectAll("rect.probe").data(d3.range(6)).join("rect").attr("class", "probe")
+      .attr("x", i => 40 + i * 104).attr("y", 55).attr("width", 40).attr("height", 40).attr("fill", "#808080");
+
+    let on = true;
+    d3.select("body").append("button").text("Toggle background").on("click", () => {
+      on = !on;
+      background.attr("fill", on ? "url(#background)" : "#fff");
+    });
+  </script>
+  </figure>
+  <p>The square on the dark side looks lighter than the one on the light side. The same thing happens in a heatmap, where a cell's neighbors shift its apparent value, and it is one more reason not to ask readers to read exact values from color: label the cells, or provide a tooltip.</p>
+
+  <h3>Small marks need stronger colors</h3>
+  <p>The smaller the mark, the harder it is to see its color, and light, low-chroma colors fade first. The same three palettes on bars, dots and thin lines:</p>
+  <figure class="example" data-mode="js" data-height="400" data-title="Example 7.2 · One palette, three mark sizes">
+  <script type="text/plain">
+    const palettes = {Pastel1: d3.schemePastel1, pitchColor: pitchColor.range(), Dark2: d3.schemeDark2};
+    const grid = d3.select("body").append("div").style("display", "grid").style("font", "11px sans-serif")
+      .style("grid-template-columns", "80px repeat(3, 190px)").style("gap", "6px 12px").style("align-items", "center");
+    ["", "bars", "dots", "lines"].forEach(t => grid.append("div").style("font-weight", 600).text(t));
+    const W = 190, H = 100;
+    const counts = pitchTypes.map(t => pitches.filter(d => d.pitch_name === t).length);
+    const game = pitches.filter(d => d.game_date === "2026-08-22").map((d, i) => ({...d, seq: i}));
+
+    for (const [name, scheme] of Object.entries(palettes)) {
+      const color = d3.scaleOrdinal(pitchTypes, scheme);
+      grid.append("div").text(name);
+      const svg = () => grid.append("svg").attr("width", W).attr("height", H);
+
+      const bars = svg(), bx = d3.scaleBand(pitchTypes, [0, W]).padding(0.1), by = d3.scaleLinear([0, 190], [H, 0]);
+      bars.selectAll("rect").data(pitchTypes).join("rect").attr("x", t => bx(t)).attr("width", bx.bandwidth())
+        .attr("y", (t, i) => by(counts[i])).attr("height", (t, i) => H - by(counts[i])).attr("fill", t => color(t));
+
+      const dots = svg(), dx = d3.scaleLinear(d3.extent(pitches, d => d.pfx_x), [4, W - 4]), dy = d3.scaleLinear(d3.extent(pitches, d => d.pfx_z), [H - 4, 4]);
+      dots.selectAll("circle").data(pitches).join("circle").attr("cx", d => dx(d.pfx_x)).attr("cy", d => dy(d.pfx_z))
+        .attr("r", 1.5).attr("fill", d => color(d.pitch_name));
+
+      const lines = svg(), lx = d3.scaleLinear([0, game.length], [0, W]), ly = d3.scaleLinear([76, 100], [H - 4, 4]);
+      lines.selectAll("path").data(d3.group(game, d => d.pitch_name)).join("path").attr("fill", "none").attr("stroke-width", 1)
+        .attr("stroke", ([t]) => color(t)).attr("d", ([, rows]) => d3.line().x(d => lx(d.seq)).y(d => ly(d.release_speed))(rows));
+    }
+  </script>
+  </figure>
+  <p>Pastel1 works for bars and nearly disappears in dots and lines. Dark2 works everywhere but is heavy on large areas. A good rule: light, soft colors for large areas, darker and more saturated ones for points, lines and text.</p>
+
+  <h3>Text on colored backgrounds</h3>
+  <p>Labels inside cells need contrast. The <a href="https://www.w3.org/TR/WCAG21/#contrast-minimum">WCAG</a> contrast ratio compares the relative luminance of text and background; 4.5 is the minimum for normal text. Below, each step of <code>d3.schemeBlues[9]</code> with dark and white text, and each ratio.</p>
+  <figure class="example" data-mode="js" data-height="180" data-title="Example 7.3 · Choosing text color by contrast">
+  <script type="text/plain">
+    // Relative luminance and contrast ratio, as defined by WCAG 2.
+    function luminance(color) {
+      const {r, g, b} = d3.rgb(color);
+      const f = v => (v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    }
+    const contrast = (a, b) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort(d3.descending);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+
+    const W = 74, svg = d3.select("body").append("svg").attr("width", 9 * W).attr("height", 150).attr("font-family", "sans-serif");
+    const cell = svg.selectAll("g").data(d3.schemeBlues[9]).join("g").attr("transform", (c, i) => `translate(${i * W},0)`);
+    cell.append("rect").attr("width", W - 4).attr("height", 120).attr("fill", c => c);
+    for (const [ink, y] of [["#1d1d1b", 38], ["#ffffff", 88]]) {
+      cell.append("text").attr("x", (W - 4) / 2).attr("y", y).attr("text-anchor", "middle").attr("fill", ink)
+        .attr("font-size", 13).attr("font-weight", c => contrast(c, ink) >= 4.5 ? 700 : 400)
+        .text(c => contrast(c, ink).toFixed(1));
+    }
+    svg.append("text").attr("y", 142).attr("font-size", 11).attr("fill", "#4c4b46")
+      .text("Bold: the ratio passes 4.5. Pick the text color with the higher ratio for each background.");
+  </script>
+  </figure>
+  <p>Somewhere in the middle the better ink flips from dark to white, and near the flip neither passes by much. Examples on these pages use a simpler rule, dark text when the background's L* is above about 55–60 and white otherwise, which picks the better ink in nearly every case.</p>
+</section>
+
+<section id="cvd">
+  <h2><span class="num">8</span>Color vision deficiency</h2>
+  <p>About 1 in 12 men and 1 in 200 women of Northern European ancestry have a red–green color vision deficiency; rates are somewhat lower elsewhere. In a lecture hall of 100 students, expect several. The main types are named after the cone that is missing or altered:</p>
+  <ul>
+    <li><strong>Protanopia</strong> and <strong>deuteranopia</strong> (long- or medium-wavelength cones): reds and greens become hard to tell apart, and red looks dark to protanopes. By far the most common.</li>
+    <li><strong>Tritanopia</strong> (short-wavelength cones): blues and greens, and yellows and pinks, merge. Rare.</li>
+  </ul>
+  <p>Most people with these conditions are <em>anomalous trichromats</em>, with a milder version of the same confusions. Simulating the full dichromacy, as the <strong>View as</strong> menu and the helper <code>cvd(color, kind)</code> do, shows the worst case.</p>
+
+  <h3>Checking a palette</h3>
+  <p>Simulate each color, then measure how far apart the closest pair is. Here distance is ΔE, the straight-line distance in CIELAB. A ΔE of about 2 is barely noticeable for large patches side by side; for small marks in a chart, Szafir (2018) found that differences need to be several times larger, so treat anything under 10–15 as a warning.</p>
+  <figure class="example" data-mode="js" data-height="560" data-title="Example 8.1 · Closest pairs under simulation">
+  <script type="text/plain">
+    const palettes = {
+      "pitchColor": pitchColor.range(),
+      "schemeCategory10 (first 5)": d3.schemeCategory10.slice(0, 5),
+      "Okabe–Ito (7)": ["#e69f00", "#56b4e9", "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7"],
+      "red and green": ["#1a9641", "#d7191c", "#a6d96a", "#fdae61", "#8c8c8c"]
+    };
+    const kinds = ["normal", "protanopia", "deuteranopia", "tritanopia"];
+    const dE = (a, b) => { const p = d3.lab(a), q = d3.lab(b); return Math.hypot(p.l - q.l, p.a - q.a, p.b - q.b); };
+
+    const S = 18, rowH = 24;
+    for (const [name, colors] of Object.entries(palettes)) {
+      d3.select("body").append("div").style("font", "600 12px sans-serif").style("margin", "10px 0 2px").text(name);
+      const svg = d3.select("body").append("svg").attr("width", 680).attr("height", rowH * kinds.length)
+        .attr("font-family", "sans-serif").attr("font-size", 11);
+      kinds.forEach((kind, k) => {
+        const sim = colors.map(c => kind === "normal" ? c : cvd(c, kind));
+        const pairs = d3.cross(d3.range(sim.length), d3.range(sim.length)).filter(([i, j]) => i < j)
+          .map(([i, j]) => ({i, j, d: dE(sim[i], sim[j])}));
+        const worst = d3.least(pairs, p => p.d);
+        const g = svg.append("g").attr("transform", `translate(0,${k * rowH})`);
+        g.append("text").attr("y", S / 2).attr("dy", "0.35em").attr("fill", "#4c4b46").text(kind);
+        g.selectAll("rect").data(sim).join("rect").attr("x", (c, i) => 90 + i * (S + 2)).attr("width", S).attr("height", S).attr("fill", c => c);
+        // Mark the closest pair and report its distance.
+        g.selectAll("line").data([worst.i, worst.j]).join("line").attr("stroke", "#1d1d1b").attr("stroke-width", 2)
+          .attr("x1", i => 90 + i * (S + 2)).attr("x2", i => 90 + i * (S + 2) + S).attr("y1", S + 2).attr("y2", S + 2);
+        g.append("text").attr("x", 250).attr("y", S / 2).attr("dy", "0.35em")
+          .attr("font-weight", worst.d < 15 ? 700 : 400).attr("fill", worst.d < 15 ? "#b3261e" : "#1d1d1b")
+          .text(`closest pair ΔE = ${worst.d.toFixed(1)}${worst.d < 15 ? "  (hard to tell apart)" : ""}`);
+      });
+    }
+  </script>
+  </figure>
+  <p>The red-and-green palette collapses for protanopes and deuteranopes, as expected, and so do the first five colors of Category10, whose green, orange and red merge. This site's pitch colors hold up under protanopia but come close to the line under deuteranopia and tritanopia, which is one reason the charts on these pages also separate pitch types by position. Okabe–Ito stays above the line for all three, at the cost of a yellow that is hard to see on white. Every palette has a weakest pair, underlined; do not put those two next to each other. Palette designers automate exactly this test. Note that ΔE in CIELAB is only an approximation of perceived difference, and the 15 used here is a rule of thumb, not a standard.</p>
+  <div class="exercise">Replace one color in <code>pitchColor</code> to raise its worst ΔE under deuteranopia without lowering it under normal vision. Is there a trade-off between the two?</div>
+
+  <h3>The red–green diverging scale</h3>
+  <p><code>d3.interpolateRdYlGn</code> is popular because red and green feel like "bad" and "good". It is also the scale that fails for the most readers. Here is the strike-rate map from example 5.1 with RdYlGn and with PuOr, and both simulated for deuteranopia.</p>
+  <figure class="example" data-mode="js" data-height="600" data-title="Example 8.2 · RdYlGn and PuOr, simulated">
+  <script type="text/plain">
+    const isStrike = d => !["ball", "blocked_ball", "hit_by_pitch"].includes(d.description);
+    const cells = locationBins(pitches, 0.5).filter(d => d.rows.length >= 3)
+      .map(d => ({...d, rate: d.rows.filter(isStrike).length / d.rows.length}));
+
+    const r = row();
+    for (const vision of ["normal", "deuteranopia"]) {
+      for (const [name, interpolator] of [["RdYlGn", d3.interpolateRdYlGn], ["PuOr", d3.interpolatePuOr]]) {
+        const color = d3.scaleDiverging([0, 0.5, 1], interpolator);
+        const fill = v => vision === "normal" ? color(v) : cvd(color(v), vision);
+        const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 260, height: 302,
+          title: `${name}, ${vision}`, xTicks: 5, parent: r});      // 50 pixels per foot
+        c.svg.append("g").selectAll("rect").data(cells).join("rect")
+          .attr("x", d => c.x(d.x0)).attr("y", d => c.y(d.z1))
+          .attr("width", d => c.x(d.x1) - c.x(d.x0)).attr("height", d => c.y(d.z0) - c.y(d.z1))
+          .attr("fill", d => fill(d.rate));
+        strikeZone(c);
+      }
+    }
+  </script>
+  </figure>
+  <p>Simulated, RdYlGn's two arms turn into similar olive-yellows: the chart no longer says which side of 50% a cell is on. PuOr's purple and orange stay distinct. When a convention demands red and green, make the two arms differ in lightness too, and add a second cue such as labels or symbols.</p>
+  <aside class="note">Simulation is a check, not a guarantee. Beyond picking a safe palette: never make color the only way to read something important. Direct labels, shapes, position, and a table or tooltip with the numbers make a chart readable for everyone, including in grayscale print.</aside>
+</section>
+
+<section id="fix">
+  <h2><span class="num">9</span>Fix this chart</h2>
+  <p>This chart shows the share of pitches that batters swung at, by location. It works in the sense that it runs. Find at least six problems with its use of color and scale before you open the solution. Use the <strong>View as</strong> menu.</p>
+  <figure class="example" data-mode="js" data-height="400" data-title="Example 9.1 · Swing rate by location (before)">
+  <script type="text/plain">
+    const swing = new Set(["swinging_strike", "swinging_strike_blocked", "foul", "foul_tip", "hit_into_play"]);
+    const cells = locationBins(pitches, 0.5).filter(d => d.rows.length > 0)
+      .map(d => ({...d, rate: d.rows.filter(p => swing.has(p.description)).length / d.rows.length}));
+
+    const color = d3.scaleSequential(d3.extent(cells, d => d.rate), d3.interpolateRainbow);
+    const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 300, height: 352, xTicks: 5});
+    const cell = c.svg.append("g").selectAll("g").data(cells).join("g")
+      .attr("transform", d => `translate(${c.x(d.x0)},${c.y(d.z1)})`);
+    const size = c.x(0.5) - c.x(0);
+    cell.append("rect").attr("width", size).attr("height", size).attr("fill", d => color(d.rate));
+    cell.append("text").attr("x", size / 2).attr("y", size / 2).attr("dy", "0.35em").attr("text-anchor", "middle")
+      .attr("font-size", 9).text(d => d3.format(".0%")(d.rate));
+    c.svg.append("rect").attr("x", c.x(zone.left)).attr("y", c.y(zone.top))
+      .attr("width", c.x(zone.right) - c.x(zone.left)).attr("height", c.y(zone.bottom) - c.y(zone.top))
+      .attr("fill", "none").attr("stroke", "#ff0000").attr("stroke-width", 2);
+  </script>
+  </figure>
+  <div class="exercise">List the problems, then fix them in the code above. Consider: the kind of scale, its domain, the legend, the text on the cells, the cells with very few pitches, the strike zone outline, and how the chart looks under each <strong>View as</strong> option. Add a title that says what a cell's value means.</div>
+  <details class="solution"><summary>Show the problems and one possible fix</summary>
+    <ol>
+      <li><strong>Rainbow on a quantity.</strong> No perceptual order, and <code>interpolateRainbow</code> is cyclical: the lowest and highest rates are both red.</li>
+      <li><strong>Domain from the data's extent.</strong> A rate has natural bounds, 0% and 100%; stretching the colors to the observed range makes small differences look large.</li>
+      <li><strong>No legend and no title.</strong> The reader cannot decode the colors or know what "rate" means.</li>
+      <li><strong>Black text everywhere.</strong> Unreadable on the dark blue and purple cells.</li>
+      <li><strong>Every cell is as loud as every other.</strong> A cell with one pitch shows 0% or 100% in full color, next to cells with thirty pitches.</li>
+      <li><strong>A red outline on red cells</strong>, and red–green confusions in the rainbow for about 1 in 12 men.</li>
+      <li>Swing rate has no meaningful midpoint, so a diverging scale would be wrong too. A sequential scale fits.</li>
+    </ol>
+    <figure class="example" data-mode="js" data-height="450" data-title="Example 9.2 · Swing rate by location (after)">
+    <script type="text/plain">
+      const swing = new Set(["swinging_strike", "swinging_strike_blocked", "foul", "foul_tip", "hit_into_play"]);
+      const minPitches = 5;
+      const cells = locationBins(pitches, 0.5).filter(d => d.rows.length > 0)
+        .map(d => ({...d, rate: d.rows.filter(p => swing.has(p.description)).length / d.rows.length}));
+
+      // Sequential, one hue, over the whole possible range of a rate.
+      const color = d3.scaleSequential([0, 1], d3.interpolateBlues);
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 300, height: 368,
+        margin: {top: 30, bottom: 42}, xTicks: 5, title: "Share of pitches swung at, by location",
+        xLabel: "catcher's view, feet from the middle of the plate"});
+      const size = c.x(0.5) - c.x(0);
+      const cell = c.svg.append("g").selectAll("g").data(cells).join("g")
+        .attr("transform", d => `translate(${c.x(d.x0)},${c.y(d.z1)})`);
+      // Cells with too few pitches get a neutral fill and no number.
+      const enough = d => d.rows.length >= minPitches;
+      cell.append("rect").attr("width", size - 1).attr("height", size - 1)
+        .attr("fill", d => enough(d) ? color(d.rate) : "#f4f3ef");
+      tooltip(cell, d => `${d.rows.filter(p => swing.has(p.description)).length} swings of ${d.rows.length} pitches`);
+      strikeZone(c);
+      // Numbers go in their own group, drawn after the zone outline so it does not cross them.
+      c.svg.append("g").attr("pointer-events", "none").selectAll("text").data(cells.filter(enough)).join("text")
+        .attr("x", d => c.x(d.x0) + size / 2).attr("y", d => c.y(d.z1) + size / 2).attr("dy", "0.35em")
+        .attr("text-anchor", "middle").attr("font-size", 9)
+        .attr("fill", d => d3.lab(color(d.rate)).l > 55 ? "#1d1d1b" : "#fff").text(d => d3.format(".0%")(d.rate));
+
+      ramp(color, {title: "share of pitches swung at", width: 290, tickFormat: "%"});
+      d3.select("body").append("div").style("font", "11px sans-serif").style("color", "#7a7872")
+        .text(`Grey cells: fewer than ${minPitches} pitches. Swings are swinging strikes, fouls, foul tips and balls in play.`);
+    </script>
+    </figure>
+    <p>Other reasonable fixes: <code>d3.interpolateViridis</code> instead of Blues, a binned <code>d3.scaleThreshold</code> at 25/50/75%, or a small multiple per pitch type. Check whichever you choose with <strong>View as</strong>.</p>
+  </details>
+  <div class="exercise">Make your own chart from the pitch data that needs color to answer a question neither page asked. Write down, before coding, which job the color does, what kind of scale that implies, and the domain. Check it in grayscale and under deuteranopia before you call it done.</div>
+</section>
+
+<section id="cheatsheet">
+  <h2>Cheat sheet</h2>
+  <div class="table-wrap"><table class="fields cheatsheet">
+    <tr><th>Data and job</th><th>Scale</th><th>Schemes to start with</th><th>Section</th></tr>
+    <tr><td>Nominal: label categories</td><td><code>d3.scaleOrdinal(domain, scheme)</code></td><td><code>schemeTableau10</code>, <code>schemeObservable10</code>, Okabe–Ito; <code>schemePaired</code> for pairs</td><td>3</td></tr>
+    <tr><td>Quantitative: how much</td><td><code>d3.scaleSequential([lo, hi], interpolator)</code></td><td><code>interpolateBlues</code>, <code>interpolateViridis</code>, <code>interpolateCividis</code>, <code>interpolateYlOrRd</code></td><td>4</td></tr>
+    <tr><td>Quantitative with a meaningful middle</td><td><code>d3.scaleDiverging([lo, mid, hi], interpolator)</code></td><td><code>interpolateRdBu</code>, <code>interpolatePuOr</code>, <code>interpolateBrBG</code></td><td>5</td></tr>
+    <tr><td>Quantitative, a few readable classes</td><td><code>d3.scaleQuantize</code>, <code>d3.scaleQuantile</code>, <code>d3.scaleThreshold</code></td><td><code>schemeBlues[k]</code>, <code>schemeYlGnBu[k]</code>, <code>schemeRdBu[k]</code></td><td>6</td></tr>
+  </table></div>
+  <div class="table-wrap"><table class="fields cheatsheet">
+    <tr><th>Need</th><th>D3</th><th>Section</th></tr>
+    <tr><td>Convert between spaces</td><td><code>d3.rgb</code>, <code>d3.hsl</code>, <code>d3.lab</code>, <code>d3.hcl</code>, <code>.formatHex()</code></td><td>2</td></tr>
+    <tr><td>Perceived lightness</td><td><code>d3.lab(color).l</code></td><td>2, 4, 7</td></tr>
+    <tr><td>Blend two colors</td><td><code>d3.interpolateLab</code>, <code>d3.interpolateHcl</code> (avoid <code>interpolateRgb</code>, <code>interpolateHsl</code> for data)</td><td>2</td></tr>
+    <tr><td>Legends</td><td>helpers <code>swatches(color)</code> and <code>ramp(color)</code></td><td>all</td></tr>
+    <tr><td>Simulate color vision deficiency</td><td>helper <code>cvd(color, "deuteranopia")</code>, and the View as menu</td><td>8</td></tr>
+  </table></div>
+  <p><strong>Before publishing any colored chart:</strong> decide the job (label or quantify); pick a scheme of the matching kind; set the domain on purpose; add a legend; check text contrast; view it in grayscale and under deuteranopia; make sure nothing important depends on color alone.</p>
+</section>
+
+<section id="data-ack">
+  <h2>Data acknowledgment</h2>
+  <p>The pitch data comes from <a href="https://baseballsavant.mlb.com">Baseball Savant</a>, Major League Baseball's Statcast site, and is copyright MLB Advanced Media, L.P. It was downloaded on September 8, 2026 via Statcast search (pitcher Tarik Skubal, regular season, August 8 to September 7, 2026). This excerpt of 495 pitches and 22 of the original 119 columns is included for teaching and non-commercial educational use. We claim no ownership of the data and do not redistribute the full dataset; download it from Baseball Savant for any other use.</p>
+</section>
+
+<section id="license">
+  <h2>Acknowledgments and license</h2>
+  <p>Further reading: Maureen Stone, "Representing Colors as Three Numbers" (2005); Danielle Albers Szafir, "Modeling Color Difference for Visualization Design" (2018); Jeffrey Heer and Maureen Stone, "Color Naming Models for Color Selection, Image Editing and Palette Design" (2012); Cynthia Brewer's <a href="https://colorbrewer2.org">ColorBrewer</a>; Colin Ware, <em>Information Visualization: Perception for Design</em>; Masataka Okabe and Kei Ito, "Color Universal Design" (2002). Color vision deficiency simulation uses the model of Gustavo Machado, Manuel Oliveira and Leandro Fernandes, "A Physiologically-based Model for Simulation of Color Vision Deficiency" (2009).</p>
+  <p>Copyright © 2026 Claudio T. Silva. The prose is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> and the code under the MIT License; see <a href="LICENSE">LICENSE</a>. D3 is included under its ISC license. The pitch data is covered by neither license.</p>
+</section>
+</main>
+</div>
+<script src="tutorial.js"></script>
+</body>
+</html>
