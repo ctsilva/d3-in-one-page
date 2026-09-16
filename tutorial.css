@@ -71,3 +71,5 @@ pre.helpers { max-height: 28rem; font-size: 12.5px; }
 details.solution { border: 1px solid var(--rule); border-radius: 8px; padding: .6rem 1rem; margin: 1.2rem 0; background: #fff; }
 details.solution summary { cursor: pointer; font-weight: 600; color: var(--accent-ink); }
 .next-page { margin-top: 3rem; padding: 1rem 1.2rem; border: 2px solid var(--ink); border-radius: 8px; font-size: 1.05rem; }
+figure.example .bar .saved { font-size: .75rem; color: var(--accent-ink); }
+button.copy-pre { font: 600 .8rem var(--sans); padding: .3rem .7rem; margin: .6rem 0 -.2rem; border-radius: 5px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); cursor: pointer; }

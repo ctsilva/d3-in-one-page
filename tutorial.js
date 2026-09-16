@@ -87,6 +87,35 @@ if (VISION) {
     ${Object.entries(CVD).map(([k, v]) => `<filter id="cvd-${k}"><feColorMatrix type="matrix" values="${m(v)}"/></filter>`).join("")}</svg>`);
 }
 
+// Edits are kept in this browser's localStorage, keyed by page and example title, together
+// with the original code: if an example's original code changes, the stale edit is dropped.
+// Storage can be unavailable (private windows, blocked site data), so every access is guarded.
+const PAGE = location.pathname.split("/").pop() || "index.html";
+const store = {
+  get(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
+  set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} },
+  remove(key) { try { localStorage.removeItem(key); } catch {} }
+};
+
+// Copies text to the clipboard and briefly confirms on the button.
+async function copyText(button, text) {
+  const label = button.textContent;
+  try { await navigator.clipboard.writeText(text); button.textContent = "Copied"; }
+  catch { button.textContent = "Copy failed"; }
+  setTimeout(() => { button.textContent = label; }, 1200);
+}
+
+// Screen readers see an SVG as a pile of shapes. Any SVG in the output that has not been
+// labeled by the example itself (helpers.js labels its charts) is marked as one image,
+// named after the example.
+function labelOutput(doc, title) {
+  doc.querySelectorAll("svg:not([role])").forEach(svg => {
+    if (svg.ownerSVGElement) return;                  // nested SVGs belong to their parent image
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", title.replace(/^[^·]*·\s*/, ""));
+  });
+}
+
 function setup(figure, index) {
   const src = figure.querySelector("script[type='text/plain']");
   const mode = figure.dataset.mode || "js";
@@ -98,27 +127,52 @@ function setup(figure, index) {
     <figcaption><span>${title}</span><span class="mode">${mode === "html" ? "HTML + CSS" : "JavaScript + D3"}</span></figcaption>
     <textarea spellcheck="false" aria-label="${title} source code"></textarea>
     <div class="bar"><button class="run">Run ▶</button><button class="reset">Reset</button>
+      <button class="copy" aria-label="Copy ${title} code">Copy</button>
       ${VISION ? VISION_SELECT : ""}
+      <span class="saved" hidden>edited · saved in this browser</span>
       <span class="hint">Edit, then Run or press ⌘/Ctrl + Enter</span></div>
     <iframe title="${title} output" style="height:${height}px"></iframe>`;
 
   const ta = figure.querySelector("textarea");
   const frame = figure.querySelector("iframe");
-  ta.value = original;
+  const saved = figure.querySelector(".saved");
+  const key = `d3-tutorial:${PAGE}:${title}`;
+  const edit = store.get(key);
+  ta.value = edit && edit.original === original ? edit.code : original;
+  if (ta.value === original && edit) store.remove(key);
+  saved.hidden = ta.value === original;
   ta.rows = Math.min(30, original.split("\n").length + 1);
+
+  let timer;
+  ta.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (ta.value === original) store.remove(key); else store.set(key, {original, code: ta.value});
+      saved.hidden = ta.value === original;
+    }, 400);
+  });
 
   const run = () => { frame.srcdoc = buildDoc(mode, ta.value); };
   // Grow the frame to fit its output (checked a few times, since some examples load data asynchronously).
   const fit = () => {
     const doc = frame.contentDocument;
-    if (doc && doc.body) frame.style.height = Math.max(height, doc.body.scrollHeight + 24) + "px";
+    if (!doc || !doc.body) return;
+    frame.style.height = Math.max(height, doc.body.scrollHeight + 24) + "px";
+    labelOutput(doc, title);
   };
   frame.addEventListener("load", () => [50, 300, 1000, 2500].forEach(t => setTimeout(fit, t)));
   figure.querySelector(".run").addEventListener("click", run);
   figure.querySelector("select.vision")?.addEventListener("change", e => {
     frame.style.filter = e.target.value;
   });
-  figure.querySelector(".reset").addEventListener("click", () => { ta.value = original; run(); });
+  figure.querySelector(".reset").addEventListener("click", () => {
+    clearTimeout(timer);
+    ta.value = original;
+    store.remove(key);
+    saved.hidden = true;
+    run();
+  });
+  figure.querySelector(".copy").addEventListener("click", e => copyText(e.currentTarget, ta.value));
   ta.addEventListener("keydown", e => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); run(); }
     if (e.key === "Tab") {  // insert two spaces instead of leaving the editor
@@ -134,6 +188,11 @@ function setup(figure, index) {
 // <pre data-helpers> shows the source of the functions in helpers.js.
 document.querySelectorAll("pre[data-helpers]").forEach(pre => {
   pre.textContent = pre.dataset.helpers.split(" ").map(name => String(window[name])).join("\n\n");
+  const button = document.createElement("button");
+  button.className = "copy-pre";
+  button.textContent = "Copy";
+  button.addEventListener("click", () => copyText(button, pre.textContent));
+  pre.before(button);
 });
 
 const runners = new Map();

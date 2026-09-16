@@ -112,6 +112,10 @@
   </script>
   </figure>
   <div class="exercise">Sort the bars by height with <code>counts.sort((a, b) => n.get(b) - n.get(a))</code>. What do you gain, and what do you lose? For a nominal field like <code>pitch_name</code>, which order would you use?</div>
+  <details class="solution"><summary>Discussion</summary>
+    <p>Sorted, the ranking is immediate: 0-0 comes first with 123 pitches, then 0-1 (71) and 1-2 (67), and 3-0 is last with 3. What you lose is the structure of the count. In the original order you can see that with zero or one strike, pitches thin out quickly as balls accumulate, while with two strikes 1-2 is the most common count. Keep an ordinal field in its order unless the only question is "which is biggest?"</p>
+    <p>A nominal field like <code>pitch_name</code> has no order of its own, so sort by value. The exception is a set of categories that appears in many charts, where one fixed order (like <code>pitchTypes</code>) lets readers find each category in the same place every time.</p>
+  </details>
 </section>
 
 <section id="helper">
@@ -236,6 +240,9 @@
   </figure>
   <p>In panels 1 and 2 you can read the order immediately and estimate ratios. With angles it is harder, with areas harder still, and lightness gives order but little sense of ratio. Hue gives neither: there is no reason green should be more than orange. That is the expressiveness failure: a rainbow on a quantity invites the reader to invent an order.</p>
   <div class="exercise">Write down your estimate of A ÷ E from each panel, then uncomment the <code>console.log</code>. Which channels were you closest with? Then replace <code>d3.scaleSqrt</code> in panel 4 with <code>d3.scaleLinear</code> and see how much larger the differences look.</div>
+  <details class="solution"><summary>Discussion</summary>
+    <p>A is the 4-seam fastball with 187 pitches and E the curveball with 31, so A ÷ E is about 6. Estimates from position and length usually land close. Areas are usually underestimated, because perceived area grows more slowly than actual area, and lightness and hue give no usable ratio at all. With <code>d3.scaleLinear</code> in panel 4 the radius is proportional to the count, so the area ratio becomes 6² = 36: the fastball circle looks enormous.</p>
+  </details>
 
   <h3>Adding channels to one mark</h3>
   <p>A point mark can carry several fields at once: two through position, and more through hue, shape and size. Each extra channel is cheaper to add than to read. Below, the location of every pitch as it crossed the plate, with the strike zone drawn in, then with one channel added per panel.</p>
@@ -324,6 +331,27 @@
   </figure>
   <p>With shape alone you have to look at the marks one by one: a plus and an asterisk, or a circle among crosses, do not pop out. With color the curveballs jump out at once, because hue is processed pre-attentively. Shape and color together is <em>redundant encoding</em>. It is no faster than color for most readers, but it keeps the chart readable in grayscale and for readers who cannot tell some of the colors apart. The <a href="color.html">Color</a> page has a menu that shows each chart as a reader with a color vision deficiency sees it; come back to this example with that in mind.</p>
   <div class="exercise">Replace <code>d3.symbolsStroke</code> with <code>d3.symbolsFill</code> and set <code>.attr("fill", ...)</code> instead of the stroke. Which set is easier to read where marks overlap? Then show all five games instead of one: at what point does shape stop working?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="330" data-title="Solution 3.3 · Filled and outlined symbols, all five games">
+    <script type="text/plain">
+      // All 495 pitches: filled symbols on the left, outlined symbols on the right.
+      const r = row();
+      for (const [title, symbols, filled] of [["d3.symbolsFill, filled", d3.symbolsFill, true],
+                                               ["d3.symbolsStroke, outlined", d3.symbolsStroke, false]]) {
+        const shape = d3.scaleOrdinal(pitchTypes, symbols);
+        const c = chart({x: d3.scaleLinear().domain([-2.75, 2.75]), y: d3.scaleLinear().domain([-0.5, 5.5]),
+          width: 270, height: 280, title, xTicks: 5, parent: r});
+        strikeZone(c);
+        c.svg.append("g").selectAll("path").data(pitches).join("path")
+          .attr("transform", d => `translate(${c.x(d.plate_x)},${c.y(d.plate_z)})`)
+          .attr("d", d => d3.symbol(shape(d.pitch_name), 40)())
+          .attr("fill", filled ? "#1d1d1b" : "none").attr("fill-opacity", 0.7)
+          .attr("stroke", filled ? "none" : "#1d1d1b");
+      }
+    </script>
+    </figure>
+    <p>Filled symbols merge into dark blobs where they overlap; outlines keep their shapes a little longer. With all five games neither works inside the strike zone, where the marks pile up: shape needs empty space around each mark to be read. Here it stops working somewhere between one game and two. Color, or small multiples by pitch type, go much further.</p>
+  </details>
 
   <h3>Expressiveness violations</h3>
   <p>The most common violation is a mark or channel that implies structure the data does not have. A line connecting nominal categories says "these are in sequence, look at the trend".</p>
@@ -355,6 +383,22 @@
   </script>
   </figure>
   <div class="exercise">A line <em>is</em> appropriate for an ordinal x with equal steps. Change the left panel to mean speed by <code>inning</code>: group with <code>d3.rollup(..., d =&gt; d.inning)</code>, use <code>d3.range(1, 8)</code> as the domain, and keep the line.</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="290" data-title="Solution 3.4 · Mean speed by inning">
+    <script type="text/plain">
+      const innings = d3.range(1, 8);
+      const mean = d3.rollup(pitches, g => d3.mean(g, d => d.release_speed), d => d.inning);
+
+      const {svg, x, y} = chart({x: d3.scalePoint().domain(innings).padding(0.4), y: d3.scaleLinear().domain([76, 100]),
+        width: 330, height: 260, title: "Mean speed of all pitches, by inning", xLabel: "inning", yLabel: "mean speed (mph)"});
+      const line = d3.line().x(i => x(i)).y(i => y(mean.get(i)));
+      svg.append("path").attr("d", line(innings)).attr("fill", "none").attr("stroke", "#2a78d6").attr("stroke-width", 2);
+      svg.append("g").selectAll("circle").data(innings).join("circle")
+        .attr("cx", i => x(i)).attr("cy", i => y(mean.get(i))).attr("r", 4).attr("fill", "#2a78d6");
+    </script>
+    </figure>
+    <p>Now the slopes mean something: this is how the average changes from one inning to the next. But look at what the average is taken over. The rise to 94.7 mph in the seventh inning is not a faster arm: its 15 pitches were 47% fastballs and included no curveballs (example 6.2). An average over a mix of categories changes when the mix changes. A line can be expressive and still mislead.</p>
+  </details>
 </section>
 
 <section id="bars">
@@ -431,6 +475,37 @@
   </script>
   </figure>
   <div class="exercise">Add a second dot per row for pitches to left-handed batters, in a lighter tint of the same color, slightly below the first. Do his pitches get faster or slower against lefties?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="260" data-title="Solution 4.2 · Speed against right- and left-handed batters">
+    <script type="text/plain">
+      const summary = (type, side) => {
+        const v = pitches.filter(d => d.pitch_name === type && d.stand === side).map(d => d.release_speed).sort(d3.ascending);
+        return {n: v.length, p10: d3.quantileSorted(v, 0.1), median: d3.quantileSorted(v, 0.5), p90: d3.quantileSorted(v, 0.9)};
+      };
+      const stats = pitchTypes.map(type => ({type, R: summary(type, "R"), L: summary(type, "L")}))
+        .sort((a, b) => d3.descending(a.R.median, b.R.median));
+
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain(d3.extent(pitches, d => d.release_speed)).nice(),
+        y: d3.scaleBand().domain(stats.map(d => d.type)).padding(0.3),
+        height: 240, margin: {left: 110, right: 60}, grid: true,
+        title: "Median and 10th–90th percentile of release speed", xLabel: "release speed (mph)"
+      });
+      for (const [side, offset, tint] of [["R", -5, 0], ["L", 5, 0.5]]) {
+        const color = type => d3.interpolateRgb(pitchColor(type), "#fff")(tint);
+        const g = svg.append("g").selectAll("g").data(stats).join("g")
+          .attr("transform", d => `translate(0,${y(d.type) + y.bandwidth() / 2 + offset})`);
+        g.append("line").attr("x1", d => x(d[side].p10)).attr("x2", d => x(d[side].p90))
+          .attr("stroke", d => color(d.type)).attr("stroke-width", 3).attr("stroke-linecap", "round");
+        g.append("circle").attr("cx", d => x(d[side].median)).attr("r", 4.5).attr("fill", d => color(d.type));
+        g.append("text").attr("x", d => x(d[side].p90) + 8).attr("dy", "0.35em").attr("font-size", 10).attr("fill", "#4c4b46")
+          .text(d => `n=${d[side].n}`);
+      }
+      d3.select("body").append("div").style("font", "11px sans-serif").text("Upper, darker: vs right-handed batters. Lower, lighter: vs left-handed batters.");
+    </script>
+    </figure>
+    <p>Mostly the same. The 4-seam fastball (median 97.6 mph against lefties, 96.8 against righties) and the changeup (89.0 against 87.9) are about a mile per hour faster against lefties, but those lefty medians rest on 26 and 22 pitches, and the slider's on only 4. Printing <code>n</code> next to each interval is what keeps a reader from over-reading differences this small.</p>
+  </details>
 </section>
 
 <section id="distributions">
@@ -495,6 +570,35 @@
   </script>
   </figure>
   <div class="exercise">Replace <code>release_speed</code> with <code>release_spin_rate</code> (change the x domain to <code>[1600, 2800]</code>). Which pitch type has the widest spread in spin? Then remove the box plots: with only 31 curveballs, do you still need them?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="320" data-title="Solution 5.2 · Spin rate by pitch type">
+    <script type="text/plain">
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain([1600, 2800]), y: d3.scaleBand().domain(pitchTypes).padding(0.15),
+        width: 560, height: 300, margin: {left: 110}, grid: true, xLabel: "spin rate (rpm)"
+      });
+      const jitter = d3.randomUniform.source(d3.randomLcg(42))(-0.35, 0.35);
+      svg.append("g").selectAll("circle").data(pitches).join("circle")
+        .attr("cx", d => x(d.release_spin_rate)).attr("cy", d => y(d.pitch_name) + y.bandwidth() * (0.5 + jitter()))
+        .attr("r", 2.5).attr("fill", d => pitchColor(d.pitch_name)).attr("fill-opacity", 0.5);
+
+      const h = y.bandwidth();
+      for (const type of pitchTypes) {
+        const v = pitches.filter(d => d.pitch_name === type).map(d => d.release_spin_rate).sort(d3.ascending);
+        const [q1, q2, q3] = [0.25, 0.5, 0.75].map(p => d3.quantileSorted(v, p));
+        const lo = d3.min(v.filter(s => s >= q1 - 1.5 * (q3 - q1)));
+        const hi = d3.max(v.filter(s => s <= q3 + 1.5 * (q3 - q1)));
+        const g = svg.append("g").attr("transform", `translate(0,${y(type)})`).attr("stroke", "#1d1d1b").attr("fill", "none");
+        g.append("line").attr("x1", x(lo)).attr("x2", x(q1)).attr("y1", h / 2).attr("y2", h / 2);
+        g.append("line").attr("x1", x(q3)).attr("x2", x(hi)).attr("y1", h / 2).attr("y2", h / 2);
+        g.append("rect").attr("x", x(q1)).attr("width", x(q3) - x(q1)).attr("y", h * 0.25).attr("height", h * 0.5);
+        g.append("line").attr("x1", x(q2)).attr("x2", x(q2)).attr("y1", h * 0.25).attr("y2", h * 0.75).attr("stroke-width", 2.5);
+      }
+    </script>
+    </figure>
+    <p>"Widest spread" depends on the measure. The changeup has the widest range, 1,619 to 2,082 rpm. The slider and the 4-seam fastball have the widest interquartile range, about 125 rpm each: their middle halves are the most spread out. That is why a box plot shows both the box and the whiskers.</p>
+    <p>Without the boxes, the 31 curveballs are all individually visible and a box adds little. The 187 fastballs overlap, and there the box summarizes what you can no longer count by eye.</p>
+  </details>
 </section>
 
 <section id="lines">
@@ -531,6 +635,30 @@
   </figure>
   <p>Hover a grey line to see its game. The answer, for these five starts, is no: the average stays within half a mile per hour of 97 from the first inning to the sixth. The individual games bounce around more because each of their points averages only a handful of pitches. The seventh-inning bump is the least trustworthy point on the chart; check how many fastballs it averages over.</p>
   <div class="exercise">Print the number of fastballs per inning with <code>d3.rollup(fastballs, g =&gt; g.length, d =&gt; d.inning)</code>. Then encode that count on the blue dots with a <code>d3.scaleSqrt</code> radius, so the reader can see which averages are weak.</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="330" data-title="Solution 6.1 · Averages sized by how many pitches they rest on">
+    <script type="text/plain">
+      const fastballs = pitches.filter(d => d.pitch_name === "4-Seam Fastball");
+      const meanSpeed = g => d3.mean(g, d => d.release_speed);
+      const all = d3.sort(d3.rollups(fastballs, g => ({speed: meanSpeed(g), n: g.length}), d => d.inning), p => p[0]);
+      console.log(d3.rollup(fastballs, g => g.length, d => d.inning));
+
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain([1, 7]), y: d3.scaleLinear().domain([96, 98]),
+        width: 520, height: 280, xTicks: 7, grid: true,
+        title: "4-seam fastball velocity by inning; dot area = number of fastballs", xLabel: "inning", yLabel: "mean release speed (mph)"
+      });
+      const radius = d3.scaleSqrt([0, d3.max(all, p => p[1].n)], [0, 9]);
+      svg.append("path").attr("d", d3.line().x(p => x(p[0])).y(p => y(p[1].speed))(all))
+        .attr("fill", "none").attr("stroke", "#2a78d6").attr("stroke-width", 2);
+      const dots = svg.append("g").selectAll("circle").data(all).join("circle")
+        .attr("cx", p => x(p[0])).attr("cy", p => y(p[1].speed)).attr("r", p => radius(p[1].n))
+        .attr("fill", "#2a78d6").attr("stroke", "#fff");
+      tooltip(dots, p => `Inning ${p[0]}: ${p[1].n} fastballs, ${p[1].speed.toFixed(1)} mph`);
+    </script>
+    </figure>
+    <p>The seventh-inning average rests on 7 fastballs, the third and fourth on 20 and 23, and the first, second and fifth on 36 to 38. The one point that looked like a change is the one with the least evidence behind it.</p>
+  </details>
 
   <h3>Stacked areas for composition over time</h3>
   <p>An area chart is a line chart with the space below filled; stacked, it shows parts of a whole changing over an ordered axis. <code>d3.stack</code> computes the layers and <code>d3.area</code> draws each as a band between its lower and upper edge.</p>
@@ -555,6 +683,33 @@
   </figure>
   <p>Only the bottom layer and the total sit on a common baseline. The fastball share is easy to read; the slider band's thickness, floating in the middle, is not. Put the layer you most want read at the bottom.</p>
   <div class="exercise">Change the <code>.keys(...)</code> order so that sliders are the bottom layer. Then try <code>d3.stack().offset(d3.stackOffsetWiggle)</code>, a streamgraph. What does it make easier to see, and what harder?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="330" data-title="Solution 6.2 · Sliders at the bottom, and a streamgraph">
+    <script type="text/plain">
+      const innings = d3.range(1, 8);
+      const share = innings.map(inning => {
+        const rows = pitches.filter(d => d.inning === inning);
+        return {inning, ...Object.fromEntries(pitchTypes.map(t => [t, rows.filter(d => d.pitch_name === t).length / rows.length]))};
+      });
+      const keys = ["Slider", "4-Seam Fastball", "Changeup", "Sinker", "Curveball"];
+      const r = row();
+      for (const [title, offset] of [["Sliders at the bottom", d3.stackOffsetNone], ["Streamgraph (stackOffsetWiggle)", d3.stackOffsetWiggle]]) {
+        const layers = d3.stack().keys(keys).offset(offset)(share);
+        const {svg, x, y} = chart({
+          x: d3.scaleLinear().domain([1, 7]), y: d3.scaleLinear().domain(d3.extent(layers.flat(2))),
+          yFormat: "%", xTicks: 7, width: 330, height: 260, title, xLabel: "inning", parent: r
+        });
+        if (offset === d3.stackOffsetWiggle) svg.select(".y-axis").remove();   // no baseline, so no meaningful axis
+        const area = d3.area().x(d => x(d.data.inning)).y0(d => y(d[0])).y1(d => y(d[1]));
+        svg.append("g").selectAll("path").data(layers).join("path")
+          .attr("d", area).attr("fill", layer => pitchColor(layer.key)).attr("stroke", "#fff");
+      }
+      swatches(pitchColor);
+    </script>
+    </figure>
+    <p>With sliders at the bottom their share can be read against the axis: 2% of pitches in the first inning, 15–21% in the second, third, sixth and seventh. The fastball, which used to be easy to read, now floats.</p>
+    <p>The streamgraph shifts the whole stack up and down to minimize how much the layers wiggle. The bands flow smoothly and the eye follows each one's shape, but no band sits on a baseline any more, so none can be measured, and the y axis has been removed because it no longer means anything. Streamgraphs suit many layers and a question about overall rhythm; they are a poor choice for reading shares.</p>
+  </details>
 </section>
 
 <section id="scatter">
@@ -623,6 +778,31 @@
   </script>
   </figure>
   <div class="exercise">Contact happens mostly in and just below the zone. Color the circles by <code>pitch_name</code> with <code>pitchColor</code>. With both size and color on overlapping circles, can you still answer "which pitch type got hit hardest"? Which chart from section 4 would answer it better?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="300" data-title="Solution 7.3 · Exit velocity by pitch type">
+    <script type="text/plain">
+      // Every pitch with a measured exit velocity (balls in play and many fouls), one row per pitch type.
+      const hit = pitches.filter(d => d.launch_speed !== null);
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain(d3.extent(hit, d => d.launch_speed)).nice(), y: d3.scaleBand().domain(pitchTypes).padding(0.15),
+        width: 560, height: 280, margin: {left: 110, right: 70}, grid: true, xLabel: "exit velocity (mph)"
+      });
+      const jitter = d3.randomUniform.source(d3.randomLcg(7))(-0.3, 0.3);
+      svg.append("g").selectAll("circle").data(hit).join("circle")
+        .attr("cx", d => x(d.launch_speed)).attr("cy", d => y(d.pitch_name) + y.bandwidth() * (0.5 + jitter()))
+        .attr("r", 3).attr("fill", d => pitchColor(d.pitch_name)).attr("fill-opacity", 0.6);
+      for (const type of pitchTypes) {
+        const v = hit.filter(d => d.pitch_name === type).map(d => d.launch_speed);
+        const median = d3.median(v);
+        svg.append("line").attr("x1", x(median)).attr("x2", x(median)).attr("y1", y(type) + 4).attr("y2", y(type) + y.bandwidth() - 4)
+          .attr("stroke", "#1d1d1b").attr("stroke-width", 2.5);
+        svg.append("text").attr("x", x.range()[1] + 6).attr("y", y(type) + y.bandwidth() / 2).attr("dy", "0.35em")
+          .attr("font-size", 10).attr("fill", "#4c4b46").text(`n=${v.length}`);
+      }
+    </script>
+    </figure>
+    <p>No: with five colors and many sizes on overlapping circles, you cannot compare types. Put the type on an axis and the speed on position, as in section 5. The black ticks are medians. Among the types with many batted balls, the 4-seam fastball was hit slightly harder than the rest (median 80 mph, against 76 to 78). The curveball's higher median rests on only 4 batted balls, and the hardest single ball, 114 mph, came off a sinker.</p>
+  </details>
 </section>
 
 <section id="matrix">
@@ -721,6 +901,39 @@
   </figure>
   <p>Now the repertoire has a geography. The fastball lives in the upper half of the zone and the sinker in the middle. The slider sits low, and the changeup lower still, drifting to the catcher's right, away from right-handed batters. The curveball panel is lumpy because it rests on only 31 pitches: smoothing a small sample can draw confident-looking shapes that another five games would erase.</p>
   <div class="exercise">Change <code>.bandwidth(14)</code> to 5 and to 30. Like the bin width in section 5, the bandwidth is a smoothing choice that can create or hide patterns. Then restrict each panel to two-strike counts with <code>d.strikes === 2</code>.</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="560" data-title="Solution 8.3 · Density with two strikes">
+    <script type="text/plain">
+      const bandwidth = 14;                           // try 5 and 30
+      const twoStrikes = pitches.filter(d => d.strikes === 2);
+      const W = 204, H = 232;
+      const r = row();
+      const panels = pitchTypes.map((type, i) => {
+        const rows = twoStrikes.filter(d => d.pitch_name === type);
+        const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: W, height: H,
+          title: `${type} (${rows.length})`, xTicks: 4, yTicks: 5, parent: r});
+        const density = d3.contourDensity()
+          .x(d => c.x(d.plate_x)).y(d => c.y(d.plate_z)).weight(() => 1 / rows.length)
+          .size([W, H]).bandwidth(bandwidth).contours(rows);
+        return {c, density, i};
+      });
+      const max = d3.max(panels, p => p.density.max);
+      const color = d3.scaleSequential([0, 1], d3.interpolateBlues);
+      const thresholds = d3.range(1, 10).map(k => k / 10);
+      for (const {c, density, i} of panels) {
+        const {svg, margin: m} = c;
+        svg.append("clipPath").attr("id", `plot-${i}`).append("rect")
+          .attr("x", m.left).attr("y", m.top).attr("width", W - m.left - m.right).attr("height", H - m.top - m.bottom);
+        svg.append("g").attr("clip-path", `url(#plot-${i})`).selectAll("path").data(thresholds).join("path")
+          .attr("d", t => d3.geoPath()(density(t * max))).attr("fill", t => color(t));
+        strikeZone(c);
+      }
+      ramp(color, {title: "density, relative to the highest peak", width: 320, tickFormat: "%"});
+    </script>
+    </figure>
+    <p>At bandwidth 5 each panel breaks into islands around individual pitches; at 30 every type becomes one round hill. Neither is the truth, and 14 is a choice too.</p>
+    <p>With two strikes the fastball moves up (average height 3.20 ft, against 2.94 ft over all counts) and the changeup moves down (1.47 ft against 1.69 ft): he elevates one and buries the other when a swing and miss would end the at-bat. The panel titles show how few pitches some of these shapes rest on: 11 curveballs and 13 sinkers.</p>
+  </details>
 </section>
 
 <section id="honest">
@@ -811,6 +1024,85 @@
       <li>In which ball-strike counts do batters put the ball in play most often?</li>
     </ol>
   </div>
+  <details class="solution"><summary>One solution for each question</summary>
+    <p><strong>1. Changeup speed by batter side.</strong> Fields: side (N), speed (Q). Graph: a strip plot with medians, since there are few enough pitches to show them all.</p>
+    <figure class="example" data-mode="js" data-height="200" data-title="Solution 10.1 · Changeup speed by batter side">
+    <script type="text/plain">
+      const changeups = pitches.filter(d => d.pitch_name === "Changeup");
+      const sides = {R: "vs right-handed", L: "vs left-handed"};
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain(d3.extent(changeups, d => d.release_speed)).nice(), y: d3.scaleBand().domain(Object.keys(sides)).padding(0.2),
+        height: 170, margin: {left: 110, right: 60}, grid: true, yFormat: s => sides[s], xLabel: "release speed (mph)"
+      });
+      const jitter = d3.randomUniform.source(d3.randomLcg(3))(-0.3, 0.3);
+      svg.append("g").selectAll("circle").data(changeups).join("circle")
+        .attr("cx", d => x(d.release_speed)).attr("cy", d => y(d.stand) + y.bandwidth() * (0.5 + jitter()))
+        .attr("r", 3).attr("fill", pitchColor("Changeup")).attr("fill-opacity", 0.6);
+      for (const side of Object.keys(sides)) {
+        const v = changeups.filter(d => d.stand === side).map(d => d.release_speed);
+        svg.append("line").attr("x1", x(d3.median(v))).attr("x2", x(d3.median(v))).attr("y1", y(side) + 4).attr("y2", y(side) + y.bandwidth() - 4)
+          .attr("stroke", "#1d1d1b").attr("stroke-width", 2.5);
+        svg.append("text").attr("x", x.range()[1] + 6).attr("y", y(side) + y.bandwidth() / 2).attr("dy", "0.35em")
+          .attr("font-size", 10).text(`median ${d3.median(v).toFixed(1)}, n=${v.length}`);
+      }
+    </script>
+    </figure>
+    <p>No, if anything it is faster against lefties: a median of 89.0 mph against 87.9, but from only 22 changeups to left-handed batters.</p>
+    <p><strong>2. Swinging strikes per pitch.</strong> Fields: pitch type (N), a rate (Q). Graph: a bar chart sorted by the rate.</p>
+    <figure class="example" data-mode="js" data-height="200" data-title="Solution 10.2 · Swinging-strike rate by pitch type">
+    <script type="text/plain">
+      const whiff = new Set(["swinging_strike", "swinging_strike_blocked"]);
+      const rates = d3.sort(pitchTypes.map(type => {
+        const rows = pitches.filter(d => d.pitch_name === type);
+        return {type, rate: rows.filter(d => whiff.has(d.description)).length / rows.length};
+      }), d => -d.rate);
+      const {svg, x, y} = chart({
+        x: d3.scaleLinear().domain([0, 0.25]), y: d3.scaleBand().domain(rates.map(d => d.type)).padding(0.25),
+        height: 180, margin: {left: 110}, xFormat: "%", xLabel: "swinging strikes per pitch"
+      });
+      svg.append("g").selectAll("rect").data(rates).join("rect")
+        .attr("x", x(0)).attr("y", d => y(d.type)).attr("height", y.bandwidth())
+        .attr("width", d => x(d.rate) - x(0)).attr("fill", "#2a78d6");
+    </script>
+    </figure>
+    <p>The changeup, at 23% of pitches; the other four types are all between 9% and 10%.</p>
+    <p><strong>3. Horizontal location by batter side.</strong> Fields: side (N), <code>plate_x</code> (Q). Graph: two histograms on a shared x scale, normalized to shares because there are four times as many pitches to righties.</p>
+    <figure class="example" data-mode="js" data-height="330" data-title="Solution 10.3 · Horizontal location by batter side">
+    <script type="text/plain">
+      const sides = {R: "vs right-handed batters", L: "vs left-handed batters"};
+      const x = d3.scaleLinear().domain([-2.5, 2.5]);
+      for (const side of Object.keys(sides)) {
+        const rows = pitches.filter(d => d.stand === side);
+        const bins = d3.bin().value(d => d.plate_x).domain(x.domain()).thresholds(d3.range(-2.5, 2.5, 0.25))(rows);
+        const c = chart({x: x.copy(), y: d3.scaleLinear().domain([0, 0.2]), height: 150, yFormat: "%", yTicks: 4,
+          title: `${sides[side]} (${rows.length} pitches)`, xLabel: side === "L" ? "plate_x (ft), catcher's view" : undefined});
+        c.svg.append("g").attr("fill", "#2a78d6").selectAll("rect").data(bins).join("rect")
+          .attr("x", b => c.x(b.x0) + 0.5).attr("width", b => c.x(b.x1) - c.x(b.x0) - 1)
+          .attr("y", b => c.y(b.length / rows.length)).attr("height", b => c.y(0) - c.y(b.length / rows.length));
+      }
+    </script>
+    </figure>
+    <p>Barely: the mean is 0.12 ft against right-handed batters and 0.09 ft against left-handed batters, and the two distributions overlap almost completely. A good next question is whether that still holds within each pitch type.</p>
+    <p><strong>4. Balls in play by count.</strong> Fields: count (O), a rate (Q). Graph: a bar chart in count order, with the number of pitches printed, because some counts are rare.</p>
+    <figure class="example" data-mode="js" data-height="270" data-title="Solution 10.4 · Share of pitches put in play, by count">
+    <script type="text/plain">
+      const counts = d3.cross([0, 1, 2], [0, 1, 2, 3], (strikes, balls) => `${balls}-${strikes}`);
+      const stats = d3.rollup(pitches, g => ({n: g.length, rate: g.filter(d => d.description === "hit_into_play").length / g.length}),
+        d => `${d.balls}-${d.strikes}`);
+      const {svg, x, y} = chart({
+        x: d3.scaleBand().domain(counts).padding(0.15), y: d3.scaleLinear().domain([0, 0.5]),
+        height: 250, yFormat: "%", xLabel: "count (balls-strikes)", yLabel: "put in play"
+      });
+      svg.append("g").selectAll("rect").data(counts).join("rect")
+        .attr("x", c => x(c)).attr("y", c => y(stats.get(c).rate))
+        .attr("width", x.bandwidth()).attr("height", c => y(0) - y(stats.get(c).rate)).attr("fill", "#2a78d6");
+      svg.append("g").selectAll("text").data(counts).join("text")
+        .attr("x", c => x(c) + x.bandwidth() / 2).attr("y", c => y(stats.get(c).rate) - 4)
+        .attr("text-anchor", "middle").attr("font-size", 9).attr("fill", "#7a7872").text(c => `n=${stats.get(c).n}`);
+    </script>
+    </figure>
+    <p>Most often in 2-0 (40%, but of only 10 pitches) and 3-2 (33% of 18), counts where the batter expects a strike or must protect the plate. Least often in 3-0 (none of 3) and 0-1 (8%). Most of these rates rest on small samples, which is why the chart prints <code>n</code>.</p>
+  </details>
   <p class="next-page"><strong>Next: <a href="color.html">Color</a>.</strong> Every chart above used color, mostly with pre-made choices. The next page takes the choices apart: what color can encode, how to pick scales for categories, magnitudes and differences, and how to check that everyone can read the result.</p>
 </section>
 

@@ -17,11 +17,16 @@ function row(parent = "body") {
 
 // An SVG with margins, axes, axis labels and a title. Pass scales with a domain;
 // chart() sets their ranges. Returns {svg, x, y, width, height, margin}.
-function chart({x, y, width = 460, height = 300, margin = {}, title, xLabel, yLabel,
+// For screen readers the SVG is one image, named by `description` if given, or else by
+// its title and axis labels.
+function chart({x, y, width = 460, height = 300, margin = {}, title, xLabel, yLabel, description,
                 xTicks = 6, yTicks = 6, xFormat, yFormat, grid = false, parent = "body"} = {}) {
   const m = {top: title ? 26 : 10, right: 16, bottom: xLabel ? 42 : 26, left: yLabel ? 58 : 44, ...margin};
   const svg = place(parent).append("svg").attr("width", width).attr("height", height)
     .attr("font-family", "sans-serif").attr("font-size", 11);
+  const label = description || [title, xLabel && `horizontal axis: ${xLabel}`, yLabel && `vertical axis: ${yLabel}`]
+    .filter(Boolean).join(". ");
+  if (label) svg.attr("role", "img").attr("aria-label", label);
   if (title) svg.append("text").attr("x", m.left).attr("y", 15).attr("font-weight", 600).attr("font-size", 12).text(title);
 
   if (x) {
@@ -53,8 +58,9 @@ function chart({x, y, width = 460, height = 300, margin = {}, title, xLabel, yLa
 function swatches(color, {title, parent = "body"} = {}) {
   const div = place(parent).append("div").style("font", "11px sans-serif").style("margin", "4px 0 8px")
     .style("display", "flex").style("flex-wrap", "wrap").style("gap", "2px 14px").style("align-items", "center");
-  if (title) div.append("span").style("font-weight", 600).text(title);
-  const item = div.selectAll("span.swatch").data(color.domain()).join("span").attr("class", "swatch");
+  div.attr("role", "list").attr("aria-label", title || "Color legend");
+  if (title) div.append("span").attr("aria-hidden", "true").style("font-weight", 600).text(title);
+  const item = div.selectAll("span.swatch").data(color.domain()).join("span").attr("class", "swatch").attr("role", "listitem");
   item.append("span").style("display", "inline-block").style("width", "12px").style("height", "12px")
     .style("margin-right", "5px").style("vertical-align", "-2px").style("border-radius", "2px")
     .style("background", d => color(d));
@@ -89,6 +95,9 @@ function ramp(color, {title, width = 300, ticks = 5, tickFormat, parent = "body"
   }
   svg.append("g").attr("transform", `translate(0,${height - m.bottom})`)
     .call(axis.tickSize(4)).call(g => g.select(".domain").remove());
+  const range = color.interpolator ? `from ${d3.min(color.domain())} to ${d3.max(color.domain())}`
+    : `${color.range().length} classes`;
+  svg.attr("role", "img").attr("aria-label", `Color legend${title ? `, ${title}` : ""}: ${range}`);
   return svg;
 }
 
