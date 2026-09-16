@@ -7,7 +7,7 @@ editable and runs in place.
 |---|---|---|
 | `index.html`, **A minimal D3 tutorial** | Just enough HTML, CSS, JavaScript and SVG, then the part of D3 that does most of the work, ending with a brushed, linked view. | about 3 hours |
 | `marks.html`, **Marks, channels and graphs** | Every exercise has a hidden discussion or worked solution. Data types; marks and channels; pitch type as symbols and redundant encoding; expressiveness and effectiveness; bar charts, dot plots, histograms, box and strip plots, lines, stacked areas, scatterplots, small multiples, symbol maps, matrices, location heatmaps and density; zero baselines, domains and shared scales; choosing a graph. | about 2.5 hours |
-| `color.html`, **Color** | Color to label vs. to quantify; RGB, HSL, CIELAB and HCL; interpolation; categorical palettes, saliency and emphasis; sequential scales and lightness profiles; rainbow false edges; diverging scales and balanced domains; quantize, quantile and threshold scales; simultaneous contrast, mark size and text contrast; color vision deficiency; a "fix this chart" exercise. | about 2.5 hours |
+| `color.html`, **Color** | Every exercise has a hidden discussion or worked solution. Color to label vs. to quantify; RGB, HSL, CIELAB and HCL; interpolation; categorical palettes, saliency and emphasis; sequential scales and lightness profiles; rainbow false edges; diverging scales and balanced domains; quantize, quantile and threshold scales; simultaneous contrast, mark size and text contrast; color vision deficiency; a "fix this chart" exercise. | about 2.5 hours |
 
 The pages are meant to be read in that order. The two labs map onto the Week 3
 (fundamental graphs), Week 4 (perception) and Week 5 (color) lectures of the NYU InfoVis
@@ -110,7 +110,7 @@ Conventions in the labs:
 ## Checking the pages
 
 There is no test suite. All three pages were verified by running every example in
-headless Chrome (26 in the D3 tutorial, 34 in `marks.html` including 12 solutions, 20 in `color.html`) and
+headless Chrome (26 in the D3 tutorial, 34 in `marks.html` including 12 solutions, 27 in `color.html` including 8 solutions) and
 confirming that none raised an error and that each produced the expected elements; the
 lab outputs were also inspected as screenshots, including with the deuteranopia filter.
 Repeat that after editing by opening the page and scrolling through it; an error in any

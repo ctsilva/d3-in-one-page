@@ -108,6 +108,29 @@
   </figure>
   <p>Yellow is nearly white in lightness and blue is nearly black, although HSL calls them equal. This is why yellow text on white is unreadable, why pure blue on black is hard to see, and why a rainbow scale has a bright band in the middle that the eye reads as a feature of the data.</p>
   <div class="exercise">Use <code>d3.hcl(h, 60, 65)</code> instead of <code>d3.hsl(h, 1, 0.5)</code>: hue varies, chroma and luminance are fixed. How do the greys compare now? Why do some of these colors look duller than the HSL ones? (Hint: not every combination of hue, chroma and lightness can be shown on a screen, and D3 clips the ones that cannot.)</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="330" data-title="Solution 2.1 · HSL and HCL, side by side">
+    <script type="text/plain">
+      const W = 100;
+      const rows = [["d3.hsl(h, 1, 0.5)", h => d3.hsl(h, 1, 0.5)], ["d3.hcl(h, 60, 65)", h => d3.hcl(h, 60, 65)]];
+      const svg = d3.select("body").append("svg").attr("width", 6 * W + 10).attr("height", 300)
+        .attr("font-family", "sans-serif").attr("font-size", 11);
+      rows.forEach(([name, make], r) => {
+        const colors = [0, 60, 120, 180, 240, 300].map(make);
+        const g = svg.append("g").attr("transform", `translate(0,${r * 150})`);
+        g.append("text").attr("y", 12).attr("font-weight", 600).text(name);
+        const cell = g.selectAll("g").data(colors).join("g").attr("transform", (d, i) => `translate(${i * W},20)`);
+        cell.append("rect").attr("width", W - 8).attr("height", 44).attr("fill", d => d.formatHex());
+        cell.append("rect").attr("y", 46).attr("width", W - 8).attr("height", 44).attr("fill", d => d3.lab(d3.lab(d.formatHex()).l, 0, 0));
+        // displayable() is false when the color is outside what sRGB can show, and formatHex() clips it.
+        cell.append("text").attr("y", 106).attr("font-weight", 600).text(d => `L* = ${d3.lab(d.formatHex()).l.toFixed(0)}`);
+        cell.append("text").attr("y", 120).attr("fill", d => d.displayable() ? "#4c4b46" : "#b3261e")
+          .text(d => d.displayable() ? "displayable" : "clipped");
+      });
+    </script>
+    </figure>
+    <p>With HCL the greys are nearly identical: L* 65 for four of the colors and 67 for the other two. Those two, the teal at hue 180 and the blue at 240, are marked "clipped": chroma 60 at that lightness is outside what an sRGB screen can show, so D3 clamps the channels, and that nudges their lightness. The HCL colors look duller than the HSL ones because they are: fully saturated HSL colors reach much higher chroma, but only by letting lightness swing from 30 to 98. You can have equal lightness or maximum colorfulness across hues, not both.</p>
+  </details>
 
   <h3>Interpolating between two colors</h3>
   <p>A continuous color scale blends between colors, and the space the blend happens in changes the result. Under each strip is its L* along the way. Pick your own endpoints with the color inputs.</p>
@@ -146,7 +169,11 @@
   </script>
   </figure>
   <p>RGB gives a greyish, washed-out middle. HSL travels around the hue wheel, through bright greens that belong to neither endpoint, and its lightness climbs unevenly and overshoots the end. Lab and HCL make lightness change smoothly from one end to the other. HCL also keeps colorfulness up, but it too walks around the hue wheel, so it can pass through unrelated hues. For scales that show quantities, interpolate in Lab or HCL, or better, use the ready-made scales in the next sections, which were designed with these problems in mind.</p>
-  <div class="exercise">Set the endpoints to a dark blue and a light yellow. Which interpolation gives the steadiest rise in L*? Now set both endpoints to colors with the same lightness, for example red <code>#e41a1c</code> and green <code>#4daf4a</code>. What happens to the L* line, and what does that mean for a scale built from those two colors?</div>
+  <div class="exercise">Set the endpoints to a dark blue and a light yellow. Which interpolation gives the steadiest rise in L*? Now set both endpoints to colors with the same lightness, for example red <code>#d45d57</code> and green <code>#46943a</code>, both L* 55. What happens to the L* line, and what does that mean for a scale built from those two colors?</div>
+  <details class="solution"><summary>Discussion</summary>
+    <p>From <code>#08306b</code> to <code>#ffffcc</code>, the largest gap between each L* line and a straight line from start to end is 0.2 for Lab, 1.0 for HCL, 1.7 for RGB and 33 for HSL. Lab gives the steadiest rise, and RGB is close only because these endpoints happen to differ mostly in lightness; HSL's detour around the hue wheel throws its lightness far off.</p>
+    <p>With <code>#d45d57</code> and <code>#46943a</code>, both at L* 55, the Lab and HCL lines are flat, and the RGB line sags in the middle, which is the muddy brown. A flat L* line means the scale has no lightness order at all: in grayscale every value looks the same, and the difference between the ends rests entirely on hue. For a reader with deuteranopia those two ends are only ΔE 6 apart. Never build a scale for quantities from two colors of equal lightness.</p>
+  </details>
 </section>
 
 <section id="categorical">
@@ -247,6 +274,36 @@
   </figure>
   <p>On the left, try to find the called strikes: you have to check the legend, then hunt. On the right the structure is visible without effort: balls surround the zone, called strikes and contact fill it, and many swinging strikes are outside it, where batters chased. Grouping is a data decision that makes the color decision easy. The four colors on the right come from the Okabe–Ito palette, designed to stay distinct for viewers with color vision deficiencies.</p>
   <div class="exercise">Some pitches went badly for Skubal: the ones hit hard. Add a fifth group, <code>"hard contact"</code>, for pitches with <code>launch_speed &gt;= 95</code>, and give it a color that stands out from the other four without being confused with them. Check your choice with <strong>View as</strong>.</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="440" data-title="Solution 3.3 · Five groups, with hard contact on top">
+    <script type="text/plain">
+      const group = {ball: "ball", blocked_ball: "ball", hit_by_pitch: "ball", called_strike: "called strike",
+        swinging_strike: "swinging strike", swinging_strike_blocked: "swinging strike", foul_tip: "swinging strike",
+        foul: "contact", hit_into_play: "contact"};
+      const groupOf = d => d.launch_speed >= 95 ? "hard contact" : group[d.description];
+      const outcome = d3.scaleOrdinal(["ball", "called strike", "swinging strike", "contact", "hard contact"],
+                                      ["#c9c7bf", "#0072b2", "#d55e00", "#009e73", "#000000"]);
+
+      const c = chart({x: d3.scaleLinear().domain([-2.75, 2.75]), y: d3.scaleLinear().domain([-0.5, 5.5]),
+        width: 270, height: 280, title: "Five groups", xTicks: 5});
+      strikeZone(c);
+      // Hard contact last, so it is drawn on top, and a little larger.
+      c.svg.append("g").selectAll("circle").data(d3.sort(pitches, d => groupOf(d) === "hard contact")).join("circle")
+        .attr("cx", d => c.x(d.plate_x)).attr("cy", d => c.y(d.plate_z))
+        .attr("r", d => groupOf(d) === "hard contact" ? 4 : 3).attr("fill", d => outcome(groupOf(d)));
+      swatches(outcome);
+
+      // How close is the new color to the others, for each kind of vision?
+      const dE = (a, b) => { const p = d3.lab(a), q = d3.lab(b); return Math.hypot(p.l - q.l, p.a - q.a, p.b - q.b); };
+      for (const kind of ["normal", "protanopia", "deuteranopia", "tritanopia"]) {
+        const sim = color => kind === "normal" ? color : cvd(color, kind);
+        const closest = d3.min(outcome.range().slice(0, 4), other => dE(sim("#000000"), sim(other)));
+        console.log(`${kind}: closest other group is ΔE ${closest.toFixed(1)} away`);
+      }
+    </script>
+    </figure>
+    <p>34 pitches were hit at 95 mph or more. Black is the simplest choice: it is far from all four other colors for every kind of vision (ΔE above 55), and it stands out without competing hue. The remaining Okabe–Ito colors also work: reddish purple <code>#cc79a7</code> stays at least ΔE 18 from the others under every simulation. Two traps: another blue would be confused with "called strike", and yellow <code>#f0e442</code> is nearly invisible on white. Drawing the group last, and slightly larger, matters as much as the color.</p>
+  </details>
 
   <h3>Emphasis: use color sparingly</h3>
   <p>Every saturated color competes for attention. If the chart has one message, give color to that message and grey to the rest. Here is the share of each pitch type's pitches that got a swing and a miss, three ways.</p>
@@ -373,6 +430,33 @@
   </figure>
   <p>On the right, the jump from green to red around the zone looks like a boundary, and the blue center looks like a hollow, although it is the highest point of the surface. Neither exists. Viridis shows the same surface as what it is, a single smooth hill.</p>
   <div class="exercise">Replace the rainbow with <code>d3.interpolateTurbo</code>. Is it better? Where does it still suggest structure that is not there? Then try <code>d3.interpolateGreys</code> and <code>d3.interpolateMagma</code>, and decide which you would publish.</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="400" data-title="Solution 4.3 · Turbo, Greys and Magma">
+    <script type="text/plain">
+      const step = 0.05, bw = 0.35, nx = 80, nz = 100;
+      const field = d3.cross(d3.range(nx), d3.range(nz), (i, j) => {
+        const cx = -2 + (i + 0.5) * step, cz = (j + 0.5) * step;
+        let sum = 0;
+        for (const d of pitches) sum += Math.exp(-((d.plate_x - cx) ** 2 + (d.plate_z - cz) ** 2) / (2 * bw * bw));
+        return {cx, cz, v: sum};
+      });
+      const max = d3.max(field, d => d.v);
+
+      // 40 pixels per foot, so each grid cell is 2 pixels square.
+      const r = row();
+      for (const [name, interpolator] of [["Turbo", d3.interpolateTurbo], ["Greys", d3.interpolateGreys], ["Magma", d3.interpolateMagma]]) {
+        const color = d3.scaleSequential([0, max], interpolator);
+        const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 220, height: 252,
+          title: `d3.interpolate${name}`, xTicks: 5, parent: r});
+        c.svg.append("g").selectAll("rect").data(field).join("rect")
+          .attr("x", d => c.x(d.cx - step / 2)).attr("y", d => c.y(d.cz + step / 2))
+          .attr("width", 2.2).attr("height", 2.2).attr("fill", d => color(d.v));
+        strikeZone(c);
+      }
+    </script>
+    </figure>
+    <p>Turbo is better than the rainbow: it runs from low to high without wrapping around, so the peak and the empty edges no longer share a color. But its lightness rises and then falls (example 4.2): the lightest part of the image is the yellow-green ring halfway up the hill, and the actual peak is a darker red. The brightest feature is a ring around the peak, not the peak itself. Greys and Magma both show one hill with the darkest or brightest point at the top. For publication, Magma or Viridis: perceptually even, readable in grayscale, and with enough hue change to tell more levels apart than Greys.</p>
+  </details>
 </section>
 
 <section id="diverging">
@@ -441,6 +525,30 @@
   </figure>
   <p>With the data's extent as the domain, each arm is stretched to its own maximum, so +0.9 is as dark a blue as −1.4 is a red. The reader compares colors and concludes the fast innings were as extreme as the slow ones. The symmetric domain gives equal differences equal colors. Note also the numbers: several cells average fewer than five pitches, so no color here should be trusted far. Hover to see the counts.</p>
   <div class="exercise">RdBu uses red for "below". In baseball, a slower fastball may be a warning sign, but red–blue also suggests cold and hot, or political parties. Try <code>d3.interpolatePuOr</code> and <code>d3.interpolateBrBG</code>. Which reads most neutrally? Which would you use for a pitching coach?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="520" data-title="Solution 5.2 · Three diverging schemes">
+    <script type="text/plain">
+      const fastballs = pitches.filter(d => d.pitch_name === "4-Seam Fastball");
+      const average = d3.mean(fastballs, d => d.release_speed);
+      const games = Array.from(new Set(pitches.map(d => d.game_date)));
+      const innings = d3.range(1, 8);
+      const stats = d3.rollup(fastballs, g => d3.mean(g, d => d.release_speed) - average, d => d.game_date, d => d.inning);
+      const cells = d3.cross(games, innings, (game, inning) => ({game, inning, diff: stats.get(game).get(inning)}))
+        .filter(d => d.diff !== undefined);
+      const m = d3.max(cells, d => Math.abs(d.diff));
+
+      for (const name of ["RdBu", "PuOr", "BrBG"]) {
+        const color = d3.scaleDiverging([-m, 0, m], d3[`interpolate${name}`]);
+        const {svg, x, y} = chart({x: d3.scaleBand().domain(innings), y: d3.scaleBand().domain(games),
+          width: 420, height: 150, margin: {left: 80}, title: `d3.interpolate${name}`});
+        svg.append("g").selectAll("rect").data(cells).join("rect")
+          .attr("x", d => x(d.inning)).attr("y", d => y(d.game))
+          .attr("width", x.bandwidth() - 2).attr("height", y.bandwidth() - 2).attr("fill", d => color(d.diff));
+      }
+    </script>
+    </figure>
+    <p>There is no single right answer. PuOr and BrBG read most neutrally: purple, orange, brown and teal carry no strong good–bad or hot–cold meaning, and both stay distinct for readers with red–green deficiencies. For a pitching coach, whose question is "when did his velocity drop?", a scheme where slower is the warm, alarming end fits the task, and RdBu does that; keep it, but say in the title that red means slower. The point of the exercise is that a color scale carries associations along with the data, and you should pick the associations on purpose.</p>
+  </details>
 </section>
 
 <section id="binned">
@@ -477,6 +585,35 @@
   </figure>
   <p>The three maps disagree about how much of the area is "busy". Quantize reserves its darkest class for the few cells near the maximum. Quantile spreads the non-empty cells evenly over the classes, which maximizes contrast but makes a cell with 16 pitches look like one with 28. Threshold uses round numbers a reader can remember: none, a few, some, many, very many. Whichever you choose, the legend must show the breaks.</p>
   <div class="exercise">Change the threshold breaks to <code>[1, 3, 6, 12]</code> and the palette to <code>d3.schemeYlGnBu[5]</code>. Then change the cell size in <code>locationBins</code> to <code>0.25</code>: which of the three scales keeps its meaning when the counts per cell change?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="340" data-title="Solution 6.1 · Smaller cells, same breaks">
+    <script type="text/plain">
+      const cellSize = 0.25;                              // try 0.5
+      const cells = locationBins(pitches, cellSize);
+      const counts = cells.map(d => d.rows.length);
+      const scales = {
+        Quantize: d3.scaleQuantize([0, d3.max(counts)], d3.schemeYlGnBu[5]),
+        Quantile: d3.scaleQuantile(counts.filter(n => n > 0), d3.schemeYlGnBu[5]),
+        Threshold: d3.scaleThreshold([1, 3, 6, 12], d3.schemeYlGnBu[5])
+      };
+      const r = row();
+      for (const [name, color] of Object.entries(scales)) {
+        const col = r.append("div");
+        const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 212, height: 242,
+          title: `d3.scale${name}`, xTicks: 4, parent: col});
+        c.svg.append("g").selectAll("rect").data(cells).join("rect")
+          .attr("x", d => c.x(d.x0)).attr("y", d => c.y(d.z1))
+          .attr("width", d => c.x(d.x1) - c.x(d.x0)).attr("height", d => c.y(d.z0) - c.y(d.z1))
+          .attr("fill", d => color(d.rows.length));
+        strikeZone(c);
+        ramp(color, {width: 205, tickFormat: ".0f", parent: col});
+        console.log(`${name}: cells per class, light to dark: ${color.range().map(k => counts.filter(n => color(n) === k).length).join(", ")}`);
+      }
+    </script>
+    </figure>
+    <p>With quarter-foot cells each cell holds a quarter of the area, and the busiest cell drops from 28 pitches to 11. Quantize and quantile rescale themselves to the new counts, so what each color means changes: the darkest quantize class used to start at 22 pitches and now starts at 9. Threshold is the only one whose colors keep their meaning, "12 or more pitches", and so its map changes: no cell reaches 12, and the darkest class is empty.</p>
+    <p>Neither behavior is wrong, but a reader who compares two maps needs the same color to mean the same thing. The robust fix is to divide by area first: color pitches per square foot, and then threshold breaks mean the same thing at any cell size.</p>
+  </details>
 </section>
 
 <section id="context">
@@ -614,6 +751,29 @@
   </figure>
   <p>The red-and-green palette collapses for protanopes and deuteranopes, as expected, and so do the first five colors of Category10, whose green, orange and red merge. This site's pitch colors hold up under protanopia but come close to the line under deuteranopia and tritanopia, which is one reason the charts on these pages also separate pitch types by position. Okabe–Ito stays above the line for all three, at the cost of a yellow that is hard to see on white. Every palette has a weakest pair, underlined; do not put those two next to each other. Palette designers automate exactly this test. Note that ΔE in CIELAB is only an approximation of perceived difference, and the 15 used here is a rule of thumb, not a standard.</p>
   <div class="exercise">Replace one color in <code>pitchColor</code> to raise its worst ΔE under deuteranopia without lowering it under normal vision. Is there a trade-off between the two?</div>
+  <details class="solution"><summary>One solution</summary>
+    <figure class="example" data-mode="js" data-height="330" data-title="Solution 8.1 · Trying replacements for one pitch color">
+    <script type="text/plain">
+      const dE = (a, b) => { const p = d3.lab(a), q = d3.lab(b); return Math.hypot(p.l - q.l, p.a - q.a, p.b - q.b); };
+      const worst = (palette, kind) => d3.min(d3.cross(d3.range(5), d3.range(5)).filter(([i, j]) => i < j),
+        ([i, j]) => dE(kind === "normal" ? palette[i] : cvd(palette[i], kind), kind === "normal" ? palette[j] : cvd(palette[j], kind)));
+      const kinds = ["normal", "protanopia", "deuteranopia", "tritanopia"];
+      const report = (label, palette) => console.log(`${label.padEnd(26)} ${kinds.map(k => `${k.slice(0, 5)} ${worst(palette, k).toFixed(1)}`).join("  ")}`);
+
+      const original = pitchColor.range();
+      report("pitchColor", original);
+      // The weakest pair under deuteranopia is Sinker (slot 2) and Curveball (slot 4). Try new curveball colors.
+      for (const candidate of ["#8c564b", "#000000", "#17becf", "#4a3aa7", "#7f7f7f"]) {
+        const palette = original.slice();
+        palette[4] = candidate;
+        report(`Curveball → ${candidate}`, palette);
+      }
+      swatches(d3.scaleOrdinal(pitchTypes, [...original.slice(0, 4), "#8c564b"]), {title: "With a brown curveball:"});
+    </script>
+    </figure>
+    <p>The weakest pair under deuteranopia is the sinker's green and the curveball's pink, ΔE 12.9. Replacing the pink with brown <code>#8c564b</code> raises the worst deuteranopia pair to 18.2 and leaves the worst normal-vision pair unchanged at 37.6. Black does even better on those numbers, 21.4, and a dark violet does worse under normal vision.</p>
+    <p>The trade-offs do not show up in ΔE. Brown and black are much darker than the other four colors, whose L* runs from 50 to 72, so the curveballs would look heavier and more important than the rest. And a fix for one kind of vision can break another: cyan <code>#17becf</code> also raises deuteranopia to 21.4, but drops tritanopia from 13.8 to 10.6. That is why the solution reports all four. Palettes are designed as a whole, and a single-color fix usually needs a second encoding as well, such as the symbols of <a href="marks.html#channels">example 3.3 of the marks page</a>.</p>
+  </details>
 
   <h3>The red–green diverging scale</h3>
   <p><code>d3.interpolateRdYlGn</code> is popular because red and green feel like "bad" and "good". It is also the scale that fails for the most readers. Here is the strike-rate map from example 5.1 with RdYlGn and with PuOr, and both simulated for deuteranopia.</p>
@@ -711,6 +871,34 @@
     <p>Other reasonable fixes: <code>d3.interpolateViridis</code> instead of Blues, a binned <code>d3.scaleThreshold</code> at 25/50/75%, or a small multiple per pitch type. Check whichever you choose with <strong>View as</strong>.</p>
   </details>
   <div class="exercise">Make your own chart from the pitch data that needs color to answer a question neither page asked. Write down, before coding, which job the color does, what kind of scale that implies, and the domain. Check it in grayscale and under deuteranopia before you call it done.</div>
+  <details class="solution"><summary>A worked example</summary>
+    <p><strong>Question:</strong> where in the zone did batters hit the ball hardest? <strong>Color's job:</strong> quantify average exit velocity per location cell. <strong>Kind of scale:</strong> sequential, because exit velocity has no meaningful middle; binned, because baseball already has a meaningful break, 95 mph, which Statcast calls a hard-hit ball. <strong>Domain:</strong> breaks at 70, 80, 90 and 95 mph, chosen for meaning rather than from the data's extent. Cells with fewer than three batted balls are left out.</p>
+    <figure class="example" data-mode="js" data-height="450" data-title="Solution 9.3 · Average exit velocity by location">
+    <script type="text/plain">
+      const hit = pitches.filter(d => d.launch_speed !== null);
+      const cells = locationBins(hit, 0.5).filter(d => d.rows.length >= 3)
+        .map(d => ({...d, speed: d3.mean(d.rows, r => r.launch_speed)}));
+      const color = d3.scaleThreshold([70, 80, 90, 95], d3.schemeOrRd[5]);
+
+      const c = chart({x: d3.scaleLinear().domain([-2, 2]), y: d3.scaleLinear().domain([0, 5]), width: 300, height: 368,
+        margin: {top: 30, bottom: 42}, xTicks: 5, title: "Average exit velocity, by location",
+        xLabel: "catcher's view, feet from the middle of the plate",
+        description: "Heatmap of average exit velocity in half-foot cells over the strike zone"});
+      const size = c.x(0.5) - c.x(0);
+      const rects = c.svg.append("g").selectAll("rect").data(cells).join("rect")
+        .attr("x", d => c.x(d.x0)).attr("y", d => c.y(d.z1)).attr("width", size - 1).attr("height", size - 1)
+        .attr("fill", d => color(d.speed));
+      tooltip(rects, d => `${d.speed.toFixed(0)} mph average over ${d.rows.length} batted balls`);
+      strikeZone(c);
+      c.svg.append("g").attr("pointer-events", "none").selectAll("text").data(cells).join("text")
+        .attr("x", d => c.x(d.x0) + size / 2).attr("y", d => c.y(d.z1) + size / 2).attr("dy", "0.35em")
+        .attr("text-anchor", "middle").attr("font-size", 9)
+        .attr("fill", d => d3.lab(color(d.speed)).l > 55 ? "#1d1d1b" : "#fff").text(d => d.speed.toFixed(0));
+      ramp(color, {title: "average exit velocity (mph); 95+ is hard-hit", width: 290, tickFormat: ".0f"});
+    </script>
+    </figure>
+    <p>Only 20 cells have three or more batted balls, and their averages run from 60 to 96 mph; the one hard-hit cell, in the upper half of the zone toward the catcher's right, rests on 5 balls. Checked with <strong>View as</strong>: OrRd is a single-hue ramp in lightness, so it survives grayscale and all three simulations, and the printed numbers mean no one has to decode the color at all.</p>
+  </details>
 </section>
 
 <section id="cheatsheet">
